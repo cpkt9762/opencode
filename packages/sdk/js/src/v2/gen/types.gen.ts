@@ -4482,7 +4482,7 @@ export type ProviderBrowserSessionsData = {
   query?: {
     directory?: string
   }
-  url: "/provider/auth/browser/sessions"
+  url: "/provider/auth/browser-session"
 }
 
 export type ProviderBrowserSessionsResponses = {
@@ -4513,7 +4513,7 @@ export type ProviderBrowserSessionRemoveData = {
   query?: {
     directory?: string
   }
-  url: "/provider/auth/browser/sessions/{recordId}"
+  url: "/provider/auth/browser-session/{recordId}"
 }
 
 export type ProviderBrowserSessionRemoveErrors = {
@@ -4547,7 +4547,7 @@ export type ProviderBrowserSessionStatusData = {
   query?: {
     directory?: string
   }
-  url: "/provider/auth/browser/sessions/{recordId}"
+  url: "/provider/auth/browser-session/{recordId}"
 }
 
 export type ProviderBrowserSessionStatusErrors = {
@@ -4588,7 +4588,7 @@ export type ProviderBrowserSessionSetupData = {
   query?: {
     directory?: string
   }
-  url: "/provider/auth/browser/sessions/{recordId}/setup"
+  url: "/provider/auth/browser-session/{recordId}/setup"
 }
 
 export type ProviderBrowserSessionSetupErrors = {
@@ -4625,7 +4625,7 @@ export type ProviderBrowserSessionRefreshData = {
   query?: {
     directory?: string
   }
-  url: "/provider/auth/browser/sessions/{recordId}/refresh"
+  url: "/provider/auth/browser-session/{recordId}/refresh"
 }
 
 export type ProviderBrowserSessionRefreshErrors = {
