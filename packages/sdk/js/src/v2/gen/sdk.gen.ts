@@ -431,10 +431,21 @@ export class Auth extends HeyApiClient {
   public usage<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).get<AuthUsageResponses, AuthUsageErrors, ThrowOnError>({
       url: "/provider/auth/usage",
       ...options,
@@ -450,6 +461,7 @@ export class Auth extends HeyApiClient {
   public setActive<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
       providerID?: string
       recordID?: string
       namespace?: string
@@ -462,6 +474,7 @@ export class Auth extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
             { in: "body", key: "providerID" },
             { in: "body", key: "recordID" },
             { in: "body", key: "namespace" },
@@ -489,6 +502,7 @@ export class Auth extends HeyApiClient {
   public deleteAccount<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
       providerID?: string
       recordID?: string
     },
@@ -500,6 +514,7 @@ export class Auth extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
             { in: "body", key: "providerID" },
             { in: "body", key: "recordID" },
           ],
@@ -526,6 +541,7 @@ export class Auth extends HeyApiClient {
   public updateAccount<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
       providerID?: string
       recordID?: string
       namespace?: string
@@ -539,6 +555,7 @@ export class Auth extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
             { in: "body", key: "providerID" },
             { in: "body", key: "recordID" },
             { in: "body", key: "namespace" },
@@ -567,10 +584,21 @@ export class Auth extends HeyApiClient {
   public usage2<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).get<AuthUsage2Responses, AuthUsage2Errors, ThrowOnError>({
       url: "/auth/usage",
       ...options,
@@ -586,6 +614,7 @@ export class Auth extends HeyApiClient {
   public setActive2<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
       providerID?: string
       recordID?: string
       namespace?: string
@@ -598,6 +627,7 @@ export class Auth extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
             { in: "body", key: "providerID" },
             { in: "body", key: "recordID" },
             { in: "body", key: "namespace" },
@@ -2804,6 +2834,7 @@ export class Session3 extends HeyApiClient {
     parameters: {
       recordId: string
       directory?: string
+      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2814,6 +2845,7 @@ export class Session3 extends HeyApiClient {
           args: [
             { in: "path", key: "recordId" },
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
           ],
         },
       ],
@@ -2838,6 +2870,7 @@ export class Session3 extends HeyApiClient {
     parameters: {
       recordId: string
       directory?: string
+      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2848,6 +2881,7 @@ export class Session3 extends HeyApiClient {
           args: [
             { in: "path", key: "recordId" },
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
           ],
         },
       ],
@@ -2872,6 +2906,7 @@ export class Session3 extends HeyApiClient {
     parameters: {
       recordId: string
       directory?: string
+      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2882,6 +2917,7 @@ export class Session3 extends HeyApiClient {
           args: [
             { in: "path", key: "recordId" },
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
           ],
         },
       ],
@@ -2906,6 +2942,7 @@ export class Session3 extends HeyApiClient {
     parameters: {
       recordId: string
       directory?: string
+      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2916,6 +2953,7 @@ export class Session3 extends HeyApiClient {
           args: [
             { in: "path", key: "recordId" },
             { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
           ],
         },
       ],
@@ -2941,10 +2979,21 @@ export class Browser extends HeyApiClient {
   public sessions<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).get<ProviderBrowserSessionsResponses, unknown, ThrowOnError>({
       url: "/provider/auth/browser-session",
       ...options,

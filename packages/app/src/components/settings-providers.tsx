@@ -10,6 +10,7 @@ import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
 import { showToast } from "@opencode-ai/ui/toast"
 
@@ -125,6 +126,7 @@ interface BrowserSessionStatus {
 function ProviderDetailView(props: { providerID: string; providerName: string; onBack: () => void }) {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
+  const server = useServer()
   const dialog = useDialog()
   const [switching, setSwitching] = createSignal<string | null>(null)
   const [deleting, setDeleting] = createSignal<string | null>(null)
@@ -137,7 +139,17 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
   const [renamingAccount, setRenamingAccount] = createSignal<string | null>(null)
   const [renameInput, setRenameInput] = createSignal("")
 
-  const doFetch = platform.fetch ?? fetch
+  const baseFetch = platform.fetch ?? fetch
+  const authHeader = (() => {
+    const http = server.current?.http
+    if (!http?.password) return undefined
+    return `Basic ${btoa(`${http.username ?? "opencode"}:${http.password}`)}`
+  })()
+  const doFetch = (input: string | URL | Request, init?: RequestInit) =>
+    baseFetch(input, {
+      ...init,
+      headers: authHeader ? { Authorization: authHeader, ...(init?.headers as Record<string, string>) } : init?.headers,
+    })
 
   const [usage, { refetch, mutate }] = createResource(async () => {
     const result = await globalSDK.client.auth.usage({})

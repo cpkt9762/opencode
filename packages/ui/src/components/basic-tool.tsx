@@ -3,6 +3,7 @@ import { animate, type AnimationPlaybackControls } from "motion"
 import { Collapsible } from "./collapsible"
 import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
+import { Markdown } from "./markdown"
 
 export type TriggerTitle = {
   title: string
@@ -203,6 +204,16 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" status={props.status} trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+export function GenericTool(props: { tool: string; output?: string; status?: string; hideDetails?: boolean }) {
+  return (
+    <BasicTool icon="mcp" status={props.status} trigger={{ title: props.tool }} hideDetails={props.hideDetails}>
+      <Show when={props.output}>
+        {(output) => (
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={output()} />
+          </div>
+        )}
+      </Show>
+    </BasicTool>
+  )
 }

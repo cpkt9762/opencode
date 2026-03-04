@@ -723,10 +723,6 @@ export default function Page() {
           onDiffStyleChange={input.onDiffStyleChange}
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
-          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-          onLineCommentUpdate={updateCommentInContext}
-          onLineCommentDelete={removeCommentFromContext}
-          lineCommentActions={reviewCommentActions()}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}
@@ -747,10 +743,6 @@ export default function Page() {
             onDiffStyleChange={input.onDiffStyleChange}
             onScrollRef={(el) => setTree("reviewScroll", el)}
             focusedFile={tree.activeDiff}
-            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-            onLineCommentUpdate={updateCommentInContext}
-            onLineCommentDelete={removeCommentFromContext}
-            lineCommentActions={reviewCommentActions()}
             comments={comments.all()}
             focusedComment={comments.focus()}
             onFocusedCommentChange={comments.setFocus}
@@ -778,10 +770,6 @@ export default function Page() {
           onDiffStyleChange={input.onDiffStyleChange}
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
-          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-          onLineCommentUpdate={updateCommentInContext}
-          onLineCommentDelete={removeCommentFromContext}
-          lineCommentActions={reviewCommentActions()}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}

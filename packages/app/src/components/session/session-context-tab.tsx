@@ -5,6 +5,7 @@ import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { checksum } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
 import { same } from "@/utils/same"
@@ -85,7 +86,15 @@ function getUsageColor(percent: number): string {
 function AnthropicUsageSection() {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
+  const server = useServer()
   const [switching, setSwitching] = createSignal<string | null>(null)
+
+  const baseFetch = platform.fetch ?? fetch
+  const authHeader = (() => {
+    const http = server.current?.http
+    if (!http?.password) return undefined
+    return `Basic ${btoa(`${http.username ?? "opencode"}:${http.password}`)}`
+  })()
 
   const [usage, { refetch, mutate }] = createResource(async () => {
     const result = await globalSDK.client.auth.usage({})
@@ -96,10 +105,11 @@ function AnthropicUsageSection() {
   const switchAccount = async (recordID: string) => {
     setSwitching(recordID)
     try {
-      const doFetch = platform.fetch ?? fetch
-      const response = await doFetch(`${globalSDK.url}/auth/active`, {
+      const headers: Record<string, string> = { "Content-Type": "application/json" }
+      if (authHeader) headers.Authorization = authHeader
+      const response = await baseFetch(`${globalSDK.url}/auth/active`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ providerID: "anthropic", recordID }),
       })
       if (response.ok) {
