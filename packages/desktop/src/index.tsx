@@ -40,6 +40,9 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 
 void initI18n()
 
+import { init as initCrashLog } from "./crash-log"
+initCrashLog()
+
 let update: Update | null = null
 
 const deepLinkEvent = "opencode:deep-link"
