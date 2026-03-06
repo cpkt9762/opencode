@@ -491,12 +491,12 @@ export function MessageTimeline(props: {
                                           class="size-3.5 shrink-0"
                                         />
                                         <span class="truncate">{getFilename(comment().path)}</span>
-                                        <Show when={comment().selection}>
+                                        <Show when={comment().selection} keyed>
                                           {(selection) => (
                                             <span class="shrink-0 text-text-weak">
-                                              {selection().startLine === selection().endLine
-                                                ? `:${selection().startLine}`
-                                                : `:${selection().startLine}-${selection().endLine}`}
+                                              {selection.startLine === selection.endLine
+                                                ? `:${selection.startLine}`
+                                                : `:${selection.startLine}-${selection.endLine}`}
                                             </span>
                                           )}
                                         </Show>

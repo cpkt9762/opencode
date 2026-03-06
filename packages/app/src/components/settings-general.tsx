@@ -473,7 +473,7 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        {/*<Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
+        {/*<Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled} keyed>
           {(_) => {
             const [enabledResource, actions] = createResource(() => platform.getWslEnabled?.())
             const enabled = () => (enabledResource.state === "pending" ? undefined : enabledResource.latest)
@@ -503,7 +503,7 @@ export const SettingsGeneral: Component = () => {
 
         <UpdatesSection />
 
-        <Show when={linux()}>
+        <Show when={linux()} keyed>
           {(_) => {
             const [valueResource, actions] = createResource(() => platform.getDisplayBackend?.())
             const value = () => (valueResource.state === "pending" ? undefined : valueResource.latest)

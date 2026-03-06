@@ -361,9 +361,9 @@ export function SessionHeader() {
 
   return (
     <>
-      <Show when={centerMount()}>
+      <Show when={centerMount()} keyed>
         {(mount) => (
-          <Portal mount={mount()}>
+          <Portal mount={mount}>
             <Button
               type="button"
               variant="ghost"
@@ -381,18 +381,16 @@ export function SessionHeader() {
                 </span>
               </div>
 
-              <Show when={hotkey()}>
-                {(keybind) => (
-                  <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>
-                )}
+              <Show when={hotkey()} keyed>
+                {(keybind) => <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind}</Keybind>}
               </Show>
             </Button>
           </Portal>
         )}
       </Show>
-      <Show when={rightMount()}>
+      <Show when={rightMount()} keyed>
         {(mount) => (
-          <Portal mount={mount()}>
+          <Portal mount={mount}>
             <div class="flex items-center gap-2">
               <StatusPopover />
               <Show when={projectDirectory()}>

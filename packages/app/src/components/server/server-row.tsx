@@ -78,6 +78,7 @@ export function ServerRow(props: ServerRowProps) {
             </span>
             <Show
               when={badge()}
+              keyed
               fallback={
                 <Show when={props.status?.version}>
                   <span ref={versionRef} class={props.versionClass ?? "text-text-weak text-14-regular truncate"}>
@@ -86,20 +87,20 @@ export function ServerRow(props: ServerRowProps) {
                 </Show>
               }
             >
-              {(badge) => badge()}
+              {(badge) => badge}
             </Show>
           </div>
-          <Show when={props.showCredentials && props.conn.type === "http" && props.conn}>
+          <Show when={props.showCredentials && props.conn.type === "http" && props.conn} keyed>
             {(conn) => (
               <div class="flex flex-row gap-3">
                 <span>
-                  {conn().http.username ? (
-                    <span class="text-text-weak">{conn().http.username}</span>
+                  {conn.http.username ? (
+                    <span class="text-text-weak">{conn.http.username}</span>
                   ) : (
                     <span class="text-text-weaker">no username</span>
                   )}
                 </span>
-                {conn().http.password && <span class="text-text-weak">••••••••</span>}
+                {conn.http.password && <span class="text-text-weak">••••••••</span>}
               </div>
             )}
           </Show>
