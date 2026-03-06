@@ -410,10 +410,14 @@ export default function Page() {
   )
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
+  let restored: string | undefined
   createEffect(
     on(
       () => lastUserMessage()?.id,
       () => {
+        const sid = params.id
+        if (!sid || sid === restored) return
+        restored = sid
         const msg = lastUserMessage()
         if (!msg) return
         if (msg.agent) {

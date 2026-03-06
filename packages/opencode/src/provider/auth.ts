@@ -99,6 +99,8 @@ export namespace ProviderAuth {
           })
         }
         if ("refresh" in result) {
+          const current = await Auth.get(input.providerID)
+          if (current?.type === "codex-multi") return
           const info: Auth.Info = {
             type: "oauth",
             access: result.access,

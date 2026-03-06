@@ -1,18 +1,38 @@
 SIGN_IDENTITY ?= OpenCode Dev
 DESKTOP_DIR   := packages/desktop
+OPENCODE_DIR  := packages/opencode
 PROD_CONF     := src-tauri/tauri.prod.conf.json
 BUNDLE_DIR    := $(DESKTOP_DIR)/src-tauri/target/release/bundle/macos
+SIDECAR_DIR   := $(DESKTOP_DIR)/src-tauri/sidecars
 APP_NAME      := OpenCode.app
 INSTALL_DIR   := /Applications
 BUN           := $(shell which bun 2>/dev/null || echo ~/.bun/bin/bun)
 
-.PHONY: build install uninstall dev clean
+# Detect macOS arch for sidecar target triple
+ARCH := $(shell uname -m)
+ifeq ($(ARCH),arm64)
+  RUST_TARGET := aarch64-apple-darwin
+  OC_DIST     := opencode-darwin-arm64
+  BUILD_FLAGS :=
+else
+  RUST_TARGET := x86_64-apple-darwin
+  OC_DIST     := opencode-darwin-x64-baseline
+  BUILD_FLAGS := --baseline
+endif
+
+.PHONY: build install uninstall dev clean cli
 
 # Build production binary (default)
 all: build
 
-# Build production binary
-build:
+# Build opencode CLI sidecar
+cli:
+	$(BUN) run --cwd $(OPENCODE_DIR) build --single $(BUILD_FLAGS)
+	@mkdir -p $(SIDECAR_DIR)
+	cp $(OPENCODE_DIR)/dist/$(OC_DIST)/bin/opencode $(SIDECAR_DIR)/opencode-cli-$(RUST_TARGET)
+
+# Build production binary (rebuilds CLI sidecar first)
+build: cli
 	$(BUN) run --cwd $(DESKTOP_DIR) tauri build -c $(PROD_CONF)
 
 # Sign + install to /Applications (backs up existing)

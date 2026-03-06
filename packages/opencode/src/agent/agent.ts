@@ -318,7 +318,8 @@ export namespace Agent {
       }),
     } satisfies Parameters<typeof generateObject>[0]
 
-    if (defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth") {
+    const openaiAuth = await Auth.get(defaultModel.providerID)
+    if (defaultModel.providerID === "openai" && (openaiAuth?.type === "oauth" || openaiAuth?.type === "codex-multi")) {
       const result = streamObject({
         ...params,
         providerOptions: ProviderTransform.providerOptions(model, {

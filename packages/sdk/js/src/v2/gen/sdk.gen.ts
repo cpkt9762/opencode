@@ -81,6 +81,12 @@ import type {
   ProjectUpdateErrors,
   ProjectUpdateResponses,
   ProviderAuthResponses,
+  ProviderCodexAccountsResponses,
+  ProviderCodexActiveErrors,
+  ProviderCodexActiveResponses,
+  ProviderCodexRemoveErrors,
+  ProviderCodexRemoveResponses,
+  ProviderCodexUsageResponses,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
   ProviderOauthAuthorizeResponses,
@@ -2539,6 +2545,143 @@ export class Oauth extends HeyApiClient {
   }
 }
 
+export class Codex extends HeyApiClient {
+  /**
+   * List Codex accounts
+   *
+   * Get all Codex multi-account entries with usage info.
+   */
+  public accounts<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProviderCodexAccountsResponses, unknown, ThrowOnError>({
+      url: "/provider/codex/accounts",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set active Codex account
+   *
+   * Switch the active Codex account by index.
+   */
+  public active<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      index?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "index" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProviderCodexActiveResponses, ProviderCodexActiveErrors, ThrowOnError>(
+      {
+        url: "/provider/codex/active",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Remove Codex account
+   *
+   * Remove a Codex account by ID.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ProviderCodexRemoveResponses,
+      ProviderCodexRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/provider/codex/accounts/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get Codex account usage
+   *
+   * Fetch usage data for all Codex accounts from ChatGPT API.
+   */
+  public usage<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProviderCodexUsageResponses, unknown, ThrowOnError>({
+      url: "/provider/codex/usage",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Provider extends HeyApiClient {
   /**
    * List providers
@@ -2603,6 +2746,11 @@ export class Provider extends HeyApiClient {
   private _oauth?: Oauth
   get oauth(): Oauth {
     return (this._oauth ??= new Oauth({ client: this.client }))
+  }
+
+  private _codex?: Codex
+  get codex(): Codex {
+    return (this._codex ??= new Codex({ client: this.client }))
   }
 }
 

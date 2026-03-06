@@ -62,7 +62,7 @@ export namespace LLM {
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
-    const isCodex = provider.id === "openai" && auth?.type === "oauth"
+    const isCodex = provider.id === "openai" && (auth?.type === "oauth" || auth?.type === "codex-multi")
 
     const system = []
     system.push(

@@ -3,8 +3,9 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { showToast } from "@opencode-ai/ui/toast"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { createMemo, type Component, For, Show } from "solid-js"
+import { createMemo, createResource, createSignal, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -14,6 +15,29 @@ import { DialogCustomProvider } from "./dialog-custom-provider"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
+
+interface CodexAccountInfo {
+  id: string
+  email: string
+  active: boolean
+  limited: boolean
+  resetAt?: number
+}
+
+interface CodexUsageInfo {
+  primary?: number
+  primaryReset?: number
+  secondary?: number
+  secondaryReset?: number
+  plan?: string
+}
+
+function usageColor(percent?: number): string {
+  if (percent === undefined) return "bg-fill-base"
+  if (percent <= 50) return "bg-fill-success-base"
+  if (percent <= 80) return "bg-fill-warning-base"
+  return "bg-fill-danger-base"
+}
 
 const PROVIDER_NOTES = [
   { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
@@ -25,6 +49,171 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "openrouter", key: "dialog.provider.openrouter.note" },
   { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
 ] as const
+
+function formatReset(resetAt?: number): string {
+  if (!resetAt) return ""
+  const diff = resetAt - Date.now()
+  if (diff <= 0) return "now"
+  const hours = Math.floor(diff / 3_600_000)
+  const minutes = Math.floor((diff % 3_600_000) / 60_000)
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
+
+function UsageBar(props: { label: string; percent?: number; reset?: number }) {
+  return (
+    <Show when={props.percent !== undefined}>
+      <div class="flex items-center gap-2 w-full">
+        <span class="text-11-regular text-text-weak w-12 shrink-0">{props.label}</span>
+        <div class="flex-1 h-1.5 bg-fill-base rounded-full overflow-hidden">
+          <div
+            class={`h-full rounded-full transition-all ${usageColor(props.percent)}`}
+            style={{ width: `${Math.min(props.percent ?? 0, 100)}%` }}
+          />
+        </div>
+        <span class="text-11-regular text-text-weak w-8 text-right shrink-0">{props.percent}%</span>
+        <Show when={props.reset}>
+          <span class="text-11-regular text-text-weakest shrink-0">· {formatReset(props.reset)}</span>
+        </Show>
+      </div>
+    </Show>
+  )
+}
+
+function CodexAccounts() {
+  const globalSDK = useGlobalSDK()
+  const dialog = useDialog()
+  const language = useLanguage()
+  const [switching, setSwitching] = createSignal<string | null>(null)
+  const [removing, setRemoving] = createSignal<string | null>(null)
+
+  const [accounts, { refetch }] = createResource(async () => {
+    const res = await globalSDK.client.provider.codex.accounts()
+    if (!res.data) return [] as CodexAccountInfo[]
+    return res.data.accounts
+  })
+
+  const [usage] = createResource(async () => {
+    const res = await globalSDK.client.provider.codex.usage()
+    if (!res.data) return new Map<string, CodexUsageInfo | null>()
+    const map = new Map<string, CodexUsageInfo | null>()
+    for (const a of res.data.accounts) map.set(a.id, a.usage)
+    return map
+  })
+
+  const switchAccount = async (index: number, email: string) => {
+    setSwitching(email)
+    await globalSDK.client.provider.codex
+      .active({ index })
+      .then(() => {
+        refetch()
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: "Switched to " + email,
+        })
+      })
+      .catch(() => {
+        showToast({ title: "Failed to switch account" })
+      })
+      .finally(() => setSwitching(null))
+  }
+
+  const removeAccount = async (id: string, email: string) => {
+    setRemoving(id)
+    await globalSDK.client.provider.codex
+      .remove({ id })
+      .then(async () => {
+        await globalSDK.client.global.dispose()
+        refetch()
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: "Removed " + email,
+        })
+      })
+      .catch(() => {
+        showToast({ title: "Failed to remove account" })
+      })
+      .finally(() => setRemoving(null))
+  }
+
+  return (
+    <Show when={accounts() !== undefined}>
+      <div class="flex flex-col gap-1" data-component="codex-accounts-section">
+        <div class="flex items-center justify-between pb-2">
+          <h3 class="text-14-medium text-text-strong">Codex Accounts</h3>
+          <Button
+            size="large"
+            variant="secondary"
+            icon="plus-small"
+            onClick={() => {
+              dialog.show(() => <DialogConnectProvider provider="openai" />)
+            }}
+          >
+            {language.t("common.connect")}
+          </Button>
+        </div>
+        <div class="bg-surface-raised-base px-4 rounded-lg">
+          <For each={accounts()}>
+            {(account, index) => {
+              const info = () => usage()?.get(account.id)
+              return (
+                <div class="group flex flex-col gap-2 py-3 border-b border-border-weak-base last:border-none">
+                  <div class="flex flex-wrap items-center justify-between gap-4 min-h-8">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <ProviderIcon id="openai" class="size-5 shrink-0 icon-strong-base" />
+                      <span class="text-14-medium text-text-strong truncate">{account.email}</span>
+                      <Show when={account.active}>
+                        <Tag>Active</Tag>
+                      </Show>
+                      <Show when={account.limited}>
+                        <Tag>Rate Limited{account.resetAt ? ` · ${formatReset(account.resetAt)}` : ""}</Tag>
+                      </Show>
+                      <Show when={info()?.plan}>{(plan) => <Tag>{plan()}</Tag>}</Show>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <Show when={!account.active}>
+                        <Button
+                          size="large"
+                          variant="secondary"
+                          disabled={switching() === account.email}
+                          onClick={() => switchAccount(index(), account.email)}
+                        >
+                          <Show when={switching() === account.email} fallback="Switch">
+                            <Spinner />
+                          </Show>
+                        </Button>
+                      </Show>
+                      <Button
+                        size="large"
+                        variant="ghost"
+                        disabled={removing() === account.id}
+                        onClick={() => removeAccount(account.id, account.email)}
+                      >
+                        <Show when={removing() === account.id} fallback={language.t("common.disconnect")}>
+                          <Spinner />
+                        </Show>
+                      </Button>
+                    </div>
+                  </div>
+                  <Show when={info()}>
+                    {(u) => (
+                      <div class="flex flex-col gap-1 pl-8">
+                        <UsageBar label="5h" percent={u().primary} reset={u().primaryReset} />
+                        <UsageBar label="7d" percent={u().secondary} reset={u().secondaryReset} />
+                      </div>
+                    )}
+                  </Show>
+                </div>
+              )
+            }}
+          </For>
+        </div>
+      </div>
+    </Show>
+  )
+}
 
 export const SettingsProviders: Component = () => {
   const dialog = useDialog()
@@ -171,6 +360,8 @@ export const SettingsProviders: Component = () => {
             </Show>
           </div>
         </div>
+
+        <CodexAccounts />
 
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.providers.section.popular")}</h3>
