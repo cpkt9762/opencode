@@ -62,6 +62,8 @@ declare global {
       deepLinks?: string[]
       wsl?: boolean
     }
+    __OPENCODE_CRASH_LOG__?: (label: string, err: unknown) => void
+    __OPENCODE_DEBUG__?: (tag: string, data: Record<string, unknown>) => void
   }
 }
 
@@ -118,7 +120,12 @@ export function AppBaseProviders(props: ParentProps) {
       <ThemeProvider>
         <LanguageProvider>
           <UiI18nBridge>
-            <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
+            <ErrorBoundary
+              fallback={(error) => {
+                window.__OPENCODE_CRASH_LOG__?.("boundary", error)
+                return <ErrorPage error={error} />
+              }}
+            >
               <DialogProvider>
                 <MarkedProviderWithNativeParser>
                   <FileComponentProvider component={File}>{props.children}</FileComponentProvider>

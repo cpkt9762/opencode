@@ -3,6 +3,7 @@ import { Store } from "@tauri-apps/plugin-store"
 
 const MAX = 200
 const CRUMB_MAX = 30
+const DEBUG_MAX = 500
 
 type Crumb = { kind: string; data: string; ts: number }
 type Entry = {
@@ -44,10 +45,19 @@ function frames(stack: string) {
 
 async function sourcemap(url: string) {
   if (maps.has(url)) return maps.get(url)
-  const json = await fetch(url + ".map")
-    .then((r) => (r.ok ? r.json() : null))
+  const text = await fetch(url)
+    .then((r) => (r.ok ? r.text() : null))
     .catch(() => null)
-  const consumer = json ? new SourceMapConsumer(json) : null
+  let raw: string | null = null
+  if (text) {
+    const m = text.match(/\/\/# sourceMappingURL=data:[^;]+;base64,(.+)$/m)
+    if (m) raw = atob(m[1])
+  }
+  if (!raw)
+    raw = await fetch(url + ".map")
+      .then((r) => (r.ok ? r.text() : null))
+      .catch(() => null)
+  const consumer = raw ? new SourceMapConsumer(JSON.parse(raw)) : null
   maps.set(url, consumer)
   return consumer
 }
@@ -82,8 +92,11 @@ async function persist(entry: Entry) {
   }
 }
 
+const NOISE = ["ResizeObserver loop"]
+
 export async function log(label: string, err: unknown) {
   const msg = err instanceof Error ? err.message : String(err)
+  if (NOISE.some((n) => msg.includes(n))) return
   const raw = err instanceof Error ? (err.stack ?? "") : ""
   console.error(`[crash:${label}]`, err)
   const entry: Entry = {
@@ -98,7 +111,22 @@ export async function log(label: string, err: unknown) {
   await persist(entry)
 }
 
+let debugStore: Awaited<ReturnType<typeof Store.load>> | undefined
+
+async function debugLog(tag: string, data: Record<string, unknown>) {
+  debugStore ??= await Store.load("model-debug.dat").catch(() => undefined)
+  if (!debugStore) return
+  const ts = new Date().toISOString()
+  await debugStore.set(ts, JSON.stringify({ tag, ...data, ts })).catch(() => undefined)
+  const keys = await debugStore.keys().catch(() => [] as string[])
+  if (keys.length > DEBUG_MAX) {
+    for (const k of keys.sort().slice(0, keys.length - DEBUG_MAX)) await debugStore.delete(k).catch(() => undefined)
+  }
+}
+
 export function init() {
+  window.__OPENCODE_CRASH_LOG__ = log
+  window.__OPENCODE_DEBUG__ = debugLog
   window.addEventListener("error", (e) => void log("error", e.error ?? e.message))
   window.addEventListener("unhandledrejection", (e) => void log("rejection", e.reason))
 

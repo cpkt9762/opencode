@@ -16,7 +16,7 @@ export default defineConfig({
     keepNames: true,
   },
   build: {
-    sourcemap: true,
+    sourcemap: "inline",
   },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
