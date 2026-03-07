@@ -227,6 +227,7 @@ export function GenericTool(props: {
   status?: string
   hideDetails?: boolean
   input?: Record<string, unknown>
+  output?: string
 }) {
   return (
     <BasicTool
@@ -238,6 +239,14 @@ export function GenericTool(props: {
         args: args(props.input),
       }}
       hideDetails={props.hideDetails}
-    />
+    >
+      <Show when={props.output}>
+        {(output) => (
+          <div data-component="tool-output" data-scrollable>
+            {output()}
+          </div>
+        )}
+      </Show>
+    </BasicTool>
   )
 }
