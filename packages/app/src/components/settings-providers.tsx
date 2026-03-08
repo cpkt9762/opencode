@@ -170,7 +170,9 @@ function CodexAccounts() {
                       <Show when={account.limited}>
                         <Tag>Rate Limited{account.resetAt ? ` · ${formatReset(account.resetAt)}` : ""}</Tag>
                       </Show>
-                      <Show when={info()?.plan}>{(plan) => <Tag>{plan()}</Tag>}</Show>
+                      <Show when={info()?.plan} keyed>
+                        {(plan) => <Tag>{plan}</Tag>}
+                      </Show>
                     </div>
                     <div class="flex items-center gap-2">
                       <Show when={!account.active}>
@@ -197,11 +199,11 @@ function CodexAccounts() {
                       </Button>
                     </div>
                   </div>
-                  <Show when={info()}>
+                  <Show when={info()} keyed>
                     {(u) => (
                       <div class="flex flex-col gap-1 pl-8">
-                        <UsageBar label="5h" percent={u().primary} reset={u().primaryReset} />
-                        <UsageBar label="7d" percent={u().secondary} reset={u().secondaryReset} />
+                        <UsageBar label="5h" percent={u.primary} reset={u.primaryReset} />
+                        <UsageBar label="7d" percent={u.secondary} reset={u.secondaryReset} />
                       </div>
                     )}
                   </Show>

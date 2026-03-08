@@ -81,13 +81,11 @@ export default function Layout(props: ParentProps) {
 
   return (
     <Show when={state.resolved}>
-      {(resolved) => (
-        <SDKProvider directory={resolved}>
-          <SyncProvider>
-            <DirectoryDataProvider directory={resolved()}>{props.children}</DirectoryDataProvider>
-          </SyncProvider>
-        </SDKProvider>
-      )}
+      <SDKProvider directory={() => state.resolved!}>
+        <SyncProvider>
+          <DirectoryDataProvider directory={state.resolved!}>{props.children}</DirectoryDataProvider>
+        </SyncProvider>
+      </SDKProvider>
     </Show>
   )
 }
