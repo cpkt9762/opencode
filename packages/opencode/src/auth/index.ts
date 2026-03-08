@@ -2,6 +2,9 @@ import path from "path"
 import { Global } from "../global"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "auth" })
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -173,9 +176,7 @@ export namespace Auth {
     const existing = await codex()
     const auth = existing ?? { type: "codex-multi" as const, accounts: [], active: 0 }
 
-    const idx = auth.accounts.findIndex((a) =>
-      account.accountId ? a.accountId === account.accountId : a.email === account.email,
-    )
+    const idx = auth.accounts.findIndex((a) => a.email === account.email)
     const entry: CodexAccount = {
       id: account.id ?? crypto.randomUUID(),
       email: account.email,
@@ -185,8 +186,11 @@ export namespace Auth {
       accountId: account.accountId,
     }
     if (idx >= 0) {
+      log.info("codex account updated", { email: account.email, accountId: account.accountId })
+      entry.id = auth.accounts[idx].id
       auth.accounts[idx] = entry
     } else {
+      log.info("codex account added", { email: account.email, accountId: account.accountId })
       auth.accounts.push(entry)
     }
 
