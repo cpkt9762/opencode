@@ -58,8 +58,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const match = name ? available.find((x) => x.name === name) : undefined
           const value = match ?? available[0]
           if (!value) return
+          const changed = store.current !== value.name
+          window.__OPENCODE_DEBUG__?.("agent-set", { from: store.current, to: value.name, changed })
           setStore("current", value.name)
-          if (!value.model) return
+          if (!changed || !value.model) return
+          window.__OPENCODE_DEBUG__?.("agent-default-model", { agent: value.name, model: value.model })
           setModel({
             providerID: value.model.providerID,
             modelID: value.model.modelID,
@@ -173,6 +176,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         batch(() => {
           const currentAgent = agent.current()
           const next = model ?? fallbackModel()
+          window.__OPENCODE_DEBUG__?.("model-set", {
+            agent: currentAgent?.name,
+            model: `${next?.providerID}/${next?.modelID}`,
+            fallback: !model,
+          })
           if (currentAgent) setEphemeral("model", currentAgent.name, next)
           if (model) models.setVisibility(model, true)
           if (options?.recent && model) models.recent.push(model)
@@ -223,6 +231,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return Object.keys(m.variants)
           },
           set(value: string | undefined) {
+            window.__OPENCODE_DEBUG__?.("variant-set", { model: current()?.id, value })
             const m = current()
             if (!m) return
             models.variant.set({ providerID: m.provider.id, modelID: m.id }, value)

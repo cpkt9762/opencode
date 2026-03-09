@@ -44,5 +44,5 @@ export const syncSessionModel = (local: Local, msg: UserMessage) => {
   if (!model) return
   if (model.provider.id !== msg.model.providerID) return
   if (model.id !== msg.model.modelID) return
-  local.model.variant.set(msg.variant)
+  if (msg.variant !== undefined) local.model.variant.set(msg.variant)
 }

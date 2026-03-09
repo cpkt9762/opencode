@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencode } from "@opencode-ai/sdk/v2"
+import { createOpencode } from "@opencode-ai/sdk/v2/server"
 import { parseArgs } from "util"
 import { Script } from "@opencode-ai/script"
 

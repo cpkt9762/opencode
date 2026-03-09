@@ -1,5 +1,6 @@
 import { App } from "@slack/bolt"
-import { createOpencode, type ToolPart } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk/server"
+import { type ToolPart } from "@opencode-ai/sdk"
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,

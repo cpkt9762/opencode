@@ -1,4 +1,5 @@
-import { createOpencodeClient, createOpencodeServer } from "@opencode-ai/sdk"
+import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeServer } from "@opencode-ai/sdk/server"
 import { pathToFileURL } from "bun"
 
 const server = await createOpencodeServer()

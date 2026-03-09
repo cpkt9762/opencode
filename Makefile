@@ -27,13 +27,13 @@ all: build
 
 # Build opencode CLI sidecar
 cli:
-	$(BUN) run --cwd $(OPENCODE_DIR) build --single $(BUILD_FLAGS)
+	PATH="$(dir $(BUN)):$$PATH" OPENCODE_CHANNEL=latest $(BUN) run --cwd $(OPENCODE_DIR) build --single $(BUILD_FLAGS)
 	@mkdir -p $(SIDECAR_DIR)
 	cp $(OPENCODE_DIR)/dist/$(OC_DIST)/bin/opencode $(SIDECAR_DIR)/opencode-cli-$(RUST_TARGET)
 
 # Build production binary (rebuilds CLI sidecar first)
 build: cli
-	$(BUN) run --cwd $(DESKTOP_DIR) tauri build -c $(PROD_CONF)
+	PATH="$(dir $(BUN)):$$PATH" $(BUN) run --cwd $(DESKTOP_DIR) tauri build -c $(PROD_CONF)
 
 # Sign + install to /Applications (backs up existing)
 install:

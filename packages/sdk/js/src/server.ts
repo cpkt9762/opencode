@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process"
 import { type Config } from "./gen/types.gen.js"
+import { createOpencodeClient } from "./client.js"
 
 export type ServerOptions = {
   hostname?: string
@@ -119,5 +120,20 @@ export function createOpencodeTui(options?: TuiOptions) {
     close() {
       proc.kill()
     },
+  }
+}
+
+export async function createOpencode(options?: ServerOptions) {
+  const server = await createOpencodeServer({
+    ...options,
+  })
+
+  const client = createOpencodeClient({
+    baseUrl: server.url,
+  })
+
+  return {
+    client,
+    server,
   }
 }
