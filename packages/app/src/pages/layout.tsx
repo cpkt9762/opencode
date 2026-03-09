@@ -1929,7 +1929,7 @@ export default function Layout(props: ParentProps) {
           width: panelProps.mobile ? undefined : `${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px`,
         }}
       >
-        <Show when={panelProps.project}>
+        <Show when={panelProps.project} keyed>
           {(p) => (
             <>
               <div class="shrink-0 px-2 py-1">
@@ -1938,7 +1938,7 @@ export default function Layout(props: ParentProps) {
                     <InlineEditor
                       id={`project:${projectId()}`}
                       value={projectName}
-                      onSave={(next) => renameProject(p(), next)}
+                      onSave={(next) => renameProject(p, next)}
                       class="text-14-medium text-text-strong truncate"
                       displayClass="text-14-medium text-text-strong truncate"
                       stopPropagation
@@ -1947,7 +1947,7 @@ export default function Layout(props: ParentProps) {
                     <Tooltip
                       placement="bottom"
                       gutter={2}
-                      value={p().worktree}
+                      value={p.worktree}
                       class="shrink-0"
                       contentStyle={{
                         "max-width": "640px",
@@ -1955,7 +1955,7 @@ export default function Layout(props: ParentProps) {
                       }}
                     >
                       <span class="text-12-regular text-text-base truncate select-text">
-                        {p().worktree.replace(homedir(), "~")}
+                        {p.worktree.replace(homedir(), "~")}
                       </span>
                     </Tooltip>
                   </div>

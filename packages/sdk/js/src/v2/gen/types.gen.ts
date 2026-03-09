@@ -4099,6 +4099,127 @@ export type ProviderOauthCallbackResponses = {
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
+export type ProviderCodexAccountsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/codex/accounts"
+}
+
+export type ProviderCodexAccountsResponses = {
+  /**
+   * Codex accounts
+   */
+  200: {
+    accounts: Array<{
+      id: string
+      email: string
+      active: boolean
+      limited: boolean
+      resetAt?: number
+    }>
+  }
+}
+
+export type ProviderCodexAccountsResponse = ProviderCodexAccountsResponses[keyof ProviderCodexAccountsResponses]
+
+export type ProviderCodexActiveData = {
+  body?: {
+    index: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/codex/active"
+}
+
+export type ProviderCodexActiveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderCodexActiveError = ProviderCodexActiveErrors[keyof ProviderCodexActiveErrors]
+
+export type ProviderCodexActiveResponses = {
+  /**
+   * Active account updated
+   */
+  200: boolean
+}
+
+export type ProviderCodexActiveResponse = ProviderCodexActiveResponses[keyof ProviderCodexActiveResponses]
+
+export type ProviderCodexRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/codex/accounts/{id}"
+}
+
+export type ProviderCodexRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderCodexRemoveError = ProviderCodexRemoveErrors[keyof ProviderCodexRemoveErrors]
+
+export type ProviderCodexRemoveResponses = {
+  /**
+   * Account removed
+   */
+  200: boolean
+}
+
+export type ProviderCodexRemoveResponse = ProviderCodexRemoveResponses[keyof ProviderCodexRemoveResponses]
+
+export type ProviderCodexUsageData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/codex/usage"
+}
+
+export type ProviderCodexUsageResponses = {
+  /**
+   * Codex account usage
+   */
+  200: {
+    accounts: Array<{
+      id: string
+      email: string
+      active: boolean
+      usage: {
+        primary?: number
+        primaryReset?: number
+        secondary?: number
+        secondaryReset?: number
+        plan?: string
+        fetchedAt?: number
+      } | null
+      error?: string
+    }>
+  }
+}
+
+export type ProviderCodexUsageResponse = ProviderCodexUsageResponses[keyof ProviderCodexUsageResponses]
+
 export type FindTextData = {
   body?: never
   path?: never

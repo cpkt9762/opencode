@@ -1,7 +1,15 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Log } from "../util/log"
 import { Installation } from "../installation"
-import { Auth, OAUTH_DUMMY_KEY } from "../auth"
+import { OAUTH_DUMMY_KEY } from "../auth"
+import {
+  codex,
+  codexAdd,
+  codexSave,
+  type CodexAccount,
+  type CodexMultiAccount,
+  type CodexUsage,
+} from "./codex-store"
 import os from "os"
 import { ProviderTransform } from "@/provider/transform"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -11,6 +19,7 @@ const log = Log.create({ service: "plugin.codex" })
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
+const CODEX_USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 
@@ -141,6 +150,57 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> 
     throw new Error(`Token refresh failed: ${response.status}`)
   }
   return response.json()
+}
+
+interface UsageResponse {
+  plan_type?: string
+  rate_limit?: {
+    primary_window?: {
+      used_percent: number
+      reset_at?: number
+    }
+    secondary_window?: {
+      used_percent: number
+      reset_at?: number
+    }
+  }
+}
+
+export async function fetchCodexUsage(
+  account: CodexAccount,
+  multi?: CodexMultiAccount,
+): Promise<CodexUsage> {
+  if (!account.access || account.expires < Date.now()) {
+    const tokens = await refreshAccessToken(account.refresh)
+    account.access = tokens.access_token
+    account.refresh = tokens.refresh_token ?? account.refresh
+    account.expires = Date.now() + (tokens.expires_in ?? 3600) * 1000
+    account.accountId = extractAccountId(tokens) ?? account.accountId
+    if (multi) await codexSave(multi)
+  }
+
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${account.access}`,
+    accept: "application/json",
+  }
+  if (account.accountId) headers["ChatGPT-Account-Id"] = account.accountId
+
+  const response = await fetch(CODEX_USAGE_ENDPOINT, { headers })
+  if (!response.ok) throw new Error(`Usage fetch failed: ${response.status}`)
+
+  const data: UsageResponse = await response.json()
+  return {
+    primary: data.rate_limit?.primary_window?.used_percent,
+    primaryReset: data.rate_limit?.primary_window?.reset_at
+      ? data.rate_limit.primary_window.reset_at * 1000
+      : undefined,
+    secondary: data.rate_limit?.secondary_window?.used_percent,
+    secondaryReset: data.rate_limit?.secondary_window?.reset_at
+      ? data.rate_limit.secondary_window.reset_at * 1000
+      : undefined,
+    plan: data.plan_type,
+    fetchedAt: Date.now(),
+  }
 }
 
 const HTML_SUCCESS = `<!doctype html>
@@ -349,150 +409,233 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
   })
 }
 
+function stripAuthHeader(init?: RequestInit) {
+  if (!init?.headers) return
+  if (init.headers instanceof Headers) {
+    init.headers.delete("authorization")
+    init.headers.delete("Authorization")
+  } else if (Array.isArray(init.headers)) {
+    init.headers = init.headers.filter(([key]) => key.toLowerCase() !== "authorization")
+  } else {
+    delete init.headers["authorization"]
+    delete init.headers["Authorization"]
+  }
+}
+
+function mergeHeaders(init?: RequestInit): Headers {
+  const headers = new Headers()
+  if (!init?.headers) return headers
+  if (init.headers instanceof Headers) {
+    init.headers.forEach((value, key) => {
+      headers.set(key, value)
+    })
+  } else if (Array.isArray(init.headers)) {
+    for (const [key, value] of init.headers) {
+      if (value !== undefined) headers.set(key, String(value))
+    }
+  } else {
+    for (const [key, value] of Object.entries(init.headers)) {
+      if (value !== undefined) headers.set(key, String(value))
+    }
+  }
+  return headers
+}
+
+function rewriteUrl(requestInput: RequestInfo | URL): URL {
+  const parsed =
+    requestInput instanceof URL
+      ? requestInput
+      : new URL(typeof requestInput === "string" ? requestInput : requestInput.url)
+  if (parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions"))
+    return new URL(CODEX_API_ENDPOINT)
+  return parsed
+}
+
+function filterModels(provider: { models: Record<string, any> }) {
+  const allowed = new Set([
+    "gpt-5.1-codex-max",
+    "gpt-5.1-codex-mini",
+    "gpt-5.2",
+    "gpt-5.4",
+    "gpt-5.2-codex",
+    "gpt-5.3-codex",
+    "gpt-5.1-codex",
+  ])
+  for (const id of Object.keys(provider.models)) {
+    if (id.includes("codex")) continue
+    if (allowed.has(id)) continue
+    delete provider.models[id]
+  }
+
+  if (!provider.models["gpt-5.3-codex"]) {
+    const model = {
+      id: "gpt-5.3-codex",
+      providerID: "openai",
+      api: {
+        id: "gpt-5.3-codex",
+        url: "https://chatgpt.com/backend-api/codex",
+        npm: "@ai-sdk/openai",
+      },
+      name: "GPT-5.3 Codex",
+      capabilities: {
+        temperature: false,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 400_000, input: 272_000, output: 128_000 },
+      status: "active" as const,
+      options: {},
+      headers: {},
+      release_date: "2026-02-05",
+      variants: {} as Record<string, Record<string, any>>,
+      family: "gpt-codex",
+    }
+    model.variants = ProviderTransform.variants(model)
+    provider.models["gpt-5.3-codex"] = model
+  }
+
+  for (const model of Object.values(provider.models)) {
+    ;(model as any).cost = { input: 0, output: 0, cache: { read: 0, write: 0 } }
+  }
+}
+
+async function codexFetch(
+  account: CodexAccount,
+  multiAuth: CodexMultiAccount,
+  requestInput: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  if (!account.access || account.expires < Date.now()) {
+    log.info("refreshing codex access token", { email: account.email })
+    const tokens = await refreshAccessToken(account.refresh)
+    account.access = tokens.access_token
+    account.refresh = tokens.refresh_token ?? account.refresh
+    account.expires = Date.now() + (tokens.expires_in ?? 3600) * 1000
+    account.accountId = extractAccountId(tokens) ?? account.accountId
+    await codexSave(multiAuth)
+  }
+
+  const headers = mergeHeaders(init)
+  headers.set("authorization", `Bearer ${account.access}`)
+  if (account.accountId) headers.set("ChatGPT-Account-Id", account.accountId)
+
+  const response = await fetch(rewriteUrl(requestInput), { ...init, headers })
+
+  if (response.status === 429 && multiAuth.accounts.length > 1) {
+    account.limited = true
+    account.resetAt = Date.now() + 5 * 3600 * 1000
+    const next = multiAuth.accounts.findIndex((a, i) => i !== multiAuth.active && !a.limited)
+    if (next >= 0) {
+      log.info("rotating to next account", { from: account.email, to: multiAuth.accounts[next].email })
+      multiAuth.active = next
+      await codexSave(multiAuth)
+      return codexFetch(multiAuth.accounts[next], multiAuth, requestInput, init)
+    }
+    await codexSave(multiAuth)
+  }
+
+  const primary = response.headers.get("x-codex-primary-used-percent")
+  const secondary = response.headers.get("x-codex-secondary-used-percent")
+  if (primary || secondary) {
+    const primaryReset = response.headers.get("x-codex-primary-reset-at")
+    const secondaryReset = response.headers.get("x-codex-secondary-reset-at")
+    account.usage = {
+      primary: primary ? Number(primary) : account.usage?.primary,
+      primaryReset: primaryReset ? Number(primaryReset) * 1000 : account.usage?.primaryReset,
+      secondary: secondary ? Number(secondary) : account.usage?.secondary,
+      secondaryReset: secondaryReset ? Number(secondaryReset) * 1000 : account.usage?.secondaryReset,
+      plan: account.usage?.plan,
+      fetchedAt: Date.now(),
+    }
+    codexSave(multiAuth).catch(() => {})
+  }
+
+  return response
+}
+
+async function oauthToMultiAccount(tokens: TokenResponse): Promise<void> {
+  const accountId = extractAccountId(tokens)
+  const email = extractEmail(tokens)
+  await codexAdd({
+    email: email ?? accountId ?? "account-" + Date.now(),
+    refresh: tokens.refresh_token,
+    access: tokens.access_token,
+    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+    accountId,
+  })
+}
+
+export function extractEmail(tokens: TokenResponse): string | undefined {
+  if (tokens.id_token) {
+    const claims = parseJwtClaims(tokens.id_token)
+    if (claims?.email) return claims.email
+  }
+  if (tokens.access_token) {
+    const claims = parseJwtClaims(tokens.access_token)
+    if (claims?.email) return claims.email
+  }
+  return undefined
+}
+
 export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
   return {
     auth: {
       provider: "openai",
       async loader(getAuth, provider) {
+        const multiAuth = await codex()
         const auth = await getAuth()
-        if (auth.type !== "oauth") return {}
+        if (auth.type !== "oauth" && !multiAuth) return {}
 
-        // Filter models to only allowed Codex models for OAuth
-        const allowedModels = new Set([
-          "gpt-5.1-codex-max",
-          "gpt-5.1-codex-mini",
-          "gpt-5.2",
-          "gpt-5.4",
-          "gpt-5.2-codex",
-          "gpt-5.3-codex",
-          "gpt-5.1-codex",
-        ])
-        for (const modelId of Object.keys(provider.models)) {
-          if (modelId.includes("codex")) continue
-          if (allowedModels.has(modelId)) continue
-          delete provider.models[modelId]
-        }
+        filterModels(provider)
 
-        if (!provider.models["gpt-5.3-codex"]) {
-          const model = {
-            id: "gpt-5.3-codex",
-            providerID: "openai",
-            api: {
-              id: "gpt-5.3-codex",
-              url: "https://chatgpt.com/backend-api/codex",
-              npm: "@ai-sdk/openai",
+        if (!multiAuth || multiAuth.accounts.length === 0) {
+          if (auth.type !== "oauth") return {}
+          return {
+            apiKey: OAUTH_DUMMY_KEY,
+            async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
+              stripAuthHeader(init)
+              const current = await getAuth()
+              if (current.type !== "oauth") return fetch(requestInput, init)
+
+              if (!current.access || current.expires < Date.now()) {
+                log.info("refreshing codex access token")
+                const tokens = await refreshAccessToken(current.refresh)
+                const aid = extractAccountId(tokens) || (current as any).accountId
+                await input.client.auth.set({
+                  path: { id: "openai" },
+                  body: {
+                    type: "oauth",
+                    refresh: tokens.refresh_token,
+                    access: tokens.access_token,
+                    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                    ...(aid && { accountId: aid }),
+                  },
+                })
+                current.access = tokens.access_token
+              }
+
+              const headers = mergeHeaders(init)
+              headers.set("authorization", `Bearer ${current.access}`)
+              if ((current as any).accountId) headers.set("ChatGPT-Account-Id", (current as any).accountId)
+              return fetch(rewriteUrl(requestInput), { ...init, headers })
             },
-            name: "GPT-5.3 Codex",
-            capabilities: {
-              temperature: false,
-              reasoning: true,
-              attachment: true,
-              toolcall: true,
-              input: { text: true, audio: false, image: true, video: false, pdf: false },
-              output: { text: true, audio: false, image: false, video: false, pdf: false },
-              interleaved: false,
-            },
-            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            limit: { context: 400_000, input: 272_000, output: 128_000 },
-            status: "active" as const,
-            options: {},
-            headers: {},
-            release_date: "2026-02-05",
-            variants: {} as Record<string, Record<string, any>>,
-            family: "gpt-codex",
-          }
-          model.variants = ProviderTransform.variants(model)
-          provider.models["gpt-5.3-codex"] = model
-        }
-
-        // Zero out costs for Codex (included with ChatGPT subscription)
-        for (const model of Object.values(provider.models)) {
-          model.cost = {
-            input: 0,
-            output: 0,
-            cache: { read: 0, write: 0 },
           }
         }
 
         return {
           apiKey: OAUTH_DUMMY_KEY,
           async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
-            // Remove dummy API key authorization header
-            if (init?.headers) {
-              if (init.headers instanceof Headers) {
-                init.headers.delete("authorization")
-                init.headers.delete("Authorization")
-              } else if (Array.isArray(init.headers)) {
-                init.headers = init.headers.filter(([key]) => key.toLowerCase() !== "authorization")
-              } else {
-                delete init.headers["authorization"]
-                delete init.headers["Authorization"]
-              }
-            }
-
-            const currentAuth = await getAuth()
-            if (currentAuth.type !== "oauth") return fetch(requestInput, init)
-
-            // Cast to include accountId field
-            const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
-
-            // Check if token needs refresh
-            if (!currentAuth.access || currentAuth.expires < Date.now()) {
-              log.info("refreshing codex access token")
-              const tokens = await refreshAccessToken(currentAuth.refresh)
-              const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
-              await input.client.auth.set({
-                path: { id: "openai" },
-                body: {
-                  type: "oauth",
-                  refresh: tokens.refresh_token,
-                  access: tokens.access_token,
-                  expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                  ...(newAccountId && { accountId: newAccountId }),
-                },
-              })
-              currentAuth.access = tokens.access_token
-              authWithAccount.accountId = newAccountId
-            }
-
-            // Build headers
-            const headers = new Headers()
-            if (init?.headers) {
-              if (init.headers instanceof Headers) {
-                init.headers.forEach((value, key) => headers.set(key, value))
-              } else if (Array.isArray(init.headers)) {
-                for (const [key, value] of init.headers) {
-                  if (value !== undefined) headers.set(key, String(value))
-                }
-              } else {
-                for (const [key, value] of Object.entries(init.headers)) {
-                  if (value !== undefined) headers.set(key, String(value))
-                }
-              }
-            }
-
-            // Set authorization header with access token
-            headers.set("authorization", `Bearer ${currentAuth.access}`)
-
-            // Set ChatGPT-Account-Id header for organization subscriptions
-            if (authWithAccount.accountId) {
-              headers.set("ChatGPT-Account-Id", authWithAccount.accountId)
-            }
-
-            // Rewrite URL to Codex endpoint
-            const parsed =
-              requestInput instanceof URL
-                ? requestInput
-                : new URL(typeof requestInput === "string" ? requestInput : requestInput.url)
-            const url =
-              parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
-                ? new URL(CODEX_API_ENDPOINT)
-                : parsed
-
-            return fetch(url, {
-              ...init,
-              headers,
-            })
+            stripAuthHeader(init)
+            const fresh = await codex()
+            if (!fresh || fresh.accounts.length === 0) return fetch(requestInput, init)
+            const account = fresh.accounts[fresh.active]
+            if (!account) return fetch(requestInput, init)
+            return codexFetch(account, fresh, requestInput, init)
           },
         }
       },
@@ -515,13 +658,13 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               callback: async () => {
                 const tokens = await callbackPromise
                 stopOAuthServer()
-                const accountId = extractAccountId(tokens)
+                await oauthToMultiAccount(tokens)
                 return {
                   type: "success" as const,
                   refresh: tokens.refresh_token,
                   access: tokens.access_token,
                   expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                  accountId,
+                  accountId: extractAccountId(tokens),
                 }
               },
             }
@@ -590,6 +733,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                     }
 
                     const tokens: TokenResponse = await tokenResponse.json()
+                    await oauthToMultiAccount(tokens)
 
                     return {
                       type: "success" as const,

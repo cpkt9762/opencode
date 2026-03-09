@@ -62,7 +62,9 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
           hideCloseButton
           onMiddleClick={() => props.onTabClose(props.tab)}
         >
-          <Show when={content()}>{(value) => value()}</Show>
+          <Show when={content()} keyed>
+            {(value) => value}
+          </Show>
         </Tabs.Trigger>
       </div>
     </div>

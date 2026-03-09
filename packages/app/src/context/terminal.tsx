@@ -92,6 +92,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
   const pickNextTerminalNumber = () => {
     const existingTitleNumbers = new Set(
       store.all.flatMap((pty) => {
+        if (!pty) return []
         const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
         if (direct !== undefined) return [direct]
         const parsed = numberFromTitle(pty.title)
@@ -136,14 +137,15 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     meta.migrated = true
 
     setStore("all", (all) => {
-      const next = all.map((pty) => {
+      const safe = all.filter((x) => x != null)
+      const next = safe.map((pty) => {
         const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
         if (direct !== undefined) return pty
         const parsed = numberFromTitle(pty.title)
         if (parsed === undefined) return pty
         return { ...pty, titleNumber: parsed }
       })
-      if (next.every((pty, index) => pty === all[index])) return all
+      if (safe.length === all.length && next.every((pty, index) => pty === all[index])) return all
       return next
     })
   })

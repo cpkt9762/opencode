@@ -290,8 +290,8 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             </Show>
           </Show>
         </div>
-        <Show when={store.actionError}>
-          {(message) => <p class="text-xs text-text-danger-base text-center max-w-2xl">{message()}</p>}
+        <Show when={store.actionError} keyed>
+          {(message) => <p class="text-xs text-text-danger-base text-center max-w-2xl">{message}</p>}
         </Show>
         <div class="flex flex-col items-center gap-2">
           <div class="flex items-center justify-center gap-1">
@@ -305,10 +305,8 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               <Icon name="discord" class="text-text-interactive-base" />
             </button>
           </div>
-          <Show when={platform.version}>
-            {(version) => (
-              <p class="text-xs text-text-weak">{language.t("error.page.version", { version: version() })}</p>
-            )}
+          <Show when={platform.version} keyed>
+            {(version) => <p class="text-xs text-text-weak">{language.t("error.page.version", { version })}</p>}
           </Show>
         </div>
       </div>
