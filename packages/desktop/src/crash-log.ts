@@ -3,8 +3,8 @@ import { Store } from "@tauri-apps/plugin-store"
 
 declare global {
   interface Window {
-    __OPENCODE_CRASH_LOG__: typeof log
-    __OPENCODE_DEBUG__: typeof debugLog
+    __OPENCODE_CRASH_LOG__?: typeof log
+    __OPENCODE_DEBUG__?: (tag: string, data: Record<string, unknown>) => void
   }
 }
 

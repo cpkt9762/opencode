@@ -209,12 +209,16 @@ export default function Page() {
   )
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
+  let restored: string | undefined
   createEffect(
     on(
       () => lastUserMessage()?.id,
       () => {
+        const id = params.id
+        if (restored === id) return
         const msg = lastUserMessage()
         if (!msg) return
+        restored = id
         syncSessionModel(local, msg)
       },
     ),
@@ -227,7 +231,10 @@ export default function Page() {
         if (!prev) return
         if (next.dir === prev.dir && next.id === prev.id) return
         if (prev.id) sync.session.evict(prev.id, prev.dir)
-        if (!next.id) resetSessionModel(local)
+        if (!next.id) {
+          restored = undefined
+          resetSessionModel(local)
+        }
       },
       { defer: true },
     ),

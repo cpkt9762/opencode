@@ -16,3 +16,9 @@ declare module "solid-js" {
     }
   }
 }
+
+declare global {
+  interface Window {
+    __OPENCODE_DEBUG__?: (tag: string, data: Record<string, unknown>) => void
+  }
+}
