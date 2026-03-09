@@ -1,6 +1,13 @@
 import { SourceMapConsumer } from "source-map-js"
 import { Store } from "@tauri-apps/plugin-store"
 
+declare global {
+  interface Window {
+    __OPENCODE_CRASH_LOG__: typeof log
+    __OPENCODE_DEBUG__: typeof debugLog
+  }
+}
+
 const MAX = 200
 const CRUMB_MAX = 30
 const DEBUG_MAX = 500
