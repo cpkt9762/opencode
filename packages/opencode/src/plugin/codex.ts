@@ -598,13 +598,13 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
       provider: "openai",
       async loader(getAuth, provider) {
         const multiAuth = await codex()
-        const auth = await getAuth()
-        if (auth.type !== "oauth" && !multiAuth) return {}
+        const auth = await getAuth().catch(() => undefined)
+        if (auth?.type !== "oauth" && !multiAuth) return {}
 
         filterModels(provider)
 
         if (!multiAuth || multiAuth.accounts.length === 0) {
-          if (auth.type !== "oauth") return {}
+          if (auth?.type !== "oauth") return {}
           return {
             apiKey: OAUTH_DUMMY_KEY,
             async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
