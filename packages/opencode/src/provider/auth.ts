@@ -6,6 +6,7 @@ import { fn } from "@/util/fn"
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
+import { codex } from "@/plugin/codex-store"
 
 export namespace ProviderAuth {
   const state = Instance.state(async () => {
@@ -99,6 +100,11 @@ export namespace ProviderAuth {
           })
         }
         if ("refresh" in result) {
+          // Skip overwriting auth for providers that manage their own multi-account storage
+          // (e.g. openai/codex stores accounts in codex-multi format via codexAdd)
+          const multi = await codex()
+          if (multi) return
+
           const info: Auth.Info = {
             type: "oauth",
             access: result.access,

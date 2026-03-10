@@ -57,7 +57,7 @@ export namespace Auth {
 
   export async function set(key: string, info: Info) {
     const normalized = key.replace(/\/+$/, "")
-    const data = await all()
+    const data = await Filesystem.readJson<Record<string, unknown>>(filepath).catch((): Record<string, unknown> => ({}))
     if (normalized !== key) delete data[key]
     delete data[normalized + "/"]
     await Filesystem.writeJson(filepath, { ...data, [normalized]: info }, 0o600)
@@ -65,7 +65,7 @@ export namespace Auth {
 
   export async function remove(key: string) {
     const normalized = key.replace(/\/+$/, "")
-    const data = await all()
+    const data = await Filesystem.readJson<Record<string, unknown>>(filepath).catch((): Record<string, unknown> => ({}))
     delete data[key]
     delete data[normalized]
     await Filesystem.writeJson(filepath, data, 0o600)

@@ -62,6 +62,9 @@ export interface IdTokenClaims {
   "https://api.openai.com/auth"?: {
     chatgpt_account_id?: string
   }
+  "https://api.openai.com/profile"?: {
+    email?: string
+  }
 }
 
 export function parseJwtClaims(token: string): IdTokenClaims | undefined {
@@ -561,8 +564,16 @@ async function codexFetch(
 async function oauthToMultiAccount(tokens: TokenResponse): Promise<void> {
   const accountId = extractAccountId(tokens)
   const email = extractEmail(tokens)
+  const resolved = email ?? accountId ?? "account-" + Date.now()
+  log.info("codex oauth resolved", {
+    email,
+    accountId,
+    resolved,
+    hasIdToken: !!tokens.id_token,
+    hasAccessToken: !!tokens.access_token,
+  })
   await codexAdd({
-    email: email ?? accountId ?? "account-" + Date.now(),
+    email: resolved,
     refresh: tokens.refresh_token,
     access: tokens.access_token,
     expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
@@ -571,13 +582,12 @@ async function oauthToMultiAccount(tokens: TokenResponse): Promise<void> {
 }
 
 export function extractEmail(tokens: TokenResponse): string | undefined {
-  if (tokens.id_token) {
-    const claims = parseJwtClaims(tokens.id_token)
-    if (claims?.email) return claims.email
-  }
-  if (tokens.access_token) {
-    const claims = parseJwtClaims(tokens.access_token)
-    if (claims?.email) return claims.email
+  for (const token of [tokens.id_token, tokens.access_token]) {
+    if (!token) continue
+    const claims = parseJwtClaims(token)
+    if (!claims) continue
+    const email = claims.email || claims["https://api.openai.com/profile"]?.email
+    if (email) return email
   }
   return undefined
 }
