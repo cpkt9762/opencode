@@ -945,6 +945,9 @@ export namespace Provider {
       const auth = await Auth.get(providerID)
       if (auth) hasAuth = true
 
+      // Fallback: check raw existence for plugins with custom auth formats (e.g. codex-multi)
+      if (!hasAuth) hasAuth = await Auth.has(providerID)
+
       // Special handling for github-copilot: also check for enterprise auth
       if (providerID === "github-copilot" && !hasAuth) {
         const enterpriseAuth = await Auth.get("github-copilot-enterprise")
@@ -954,8 +957,8 @@ export namespace Provider {
       if (!hasAuth) continue
       if (!plugin.auth.loader) continue
 
-      // Load for the main provider if auth exists
-      if (auth) {
+      // Load for the main provider — loader handles its own auth format
+      {
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
         const opts = options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }

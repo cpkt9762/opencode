@@ -62,7 +62,10 @@ export namespace LLM {
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
-    const isCodex = provider.id === "openai" && auth?.type === "oauth"
+    // auth may be undefined for codex-multi format (not a valid Auth.Info type)
+    // fallback to raw key existence check
+    const isCodex =
+      provider.id === "openai" && (auth?.type === "oauth" || (!auth && (await Auth.has("openai"))))
 
     const system = []
     system.push(

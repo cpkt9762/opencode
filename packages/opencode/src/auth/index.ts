@@ -55,6 +55,11 @@ export namespace Auth {
     )
   }
 
+  export async function has(key: string): Promise<boolean> {
+    const data = await Filesystem.readJson<Record<string, unknown>>(filepath).catch(() => ({}))
+    return key in data
+  }
+
   export async function set(key: string, info: Info) {
     const normalized = key.replace(/\/+$/, "")
     const data = await Filesystem.readJson<Record<string, unknown>>(filepath).catch((): Record<string, unknown> => ({}))
