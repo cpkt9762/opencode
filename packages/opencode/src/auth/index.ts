@@ -63,6 +63,9 @@ export namespace Auth {
   export async function set(key: string, info: Info) {
     const normalized = key.replace(/\/+$/, "")
     const data = await Filesystem.readJson<Record<string, unknown>>(filepath).catch((): Record<string, unknown> => ({}))
+    // Don't overwrite codex-multi data with oauth — codex plugin manages its own storage
+    const existing = data[normalized] as Record<string, unknown> | undefined
+    if (existing?.type === "codex-multi" && info.type === "oauth") return
     if (normalized !== key) delete data[key]
     delete data[normalized + "/"]
     await Filesystem.writeJson(filepath, { ...data, [normalized]: info }, 0o600)
