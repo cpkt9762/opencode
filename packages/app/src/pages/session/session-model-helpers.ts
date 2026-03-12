@@ -39,10 +39,4 @@ export const syncSessionModel = (local: Local, msg: UserMessage) => {
     local.agent.set(msg.agent)
     local.model.set(msg.model)
   })
-
-  const model = local.model.current()
-  if (!model) return
-  if (model.provider.id !== msg.model.providerID) return
-  if (model.id !== msg.model.modelID) return
-  if (msg.variant !== undefined) local.model.variant.set(msg.variant)
 }

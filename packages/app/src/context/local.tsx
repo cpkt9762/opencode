@@ -67,8 +67,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             providerID: value.model.providerID,
             modelID: value.model.modelID,
           })
-          if (value.variant)
-            models.variant.set({ providerID: value.model.providerID, modelID: value.model.modelID }, value.variant)
         },
         move(direction: 1 | -1) {
           const available = list()
@@ -87,8 +85,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             providerID: value.model.providerID,
             modelID: value.model.modelID,
           })
-          if (value.variant)
-            models.variant.set({ providerID: value.model.providerID, modelID: value.model.modelID }, value.variant)
         },
       }
     })()
