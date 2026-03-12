@@ -14,7 +14,7 @@ const message = (input?: Partial<Pick<UserMessage, "agent" | "model" | "variant"
   }) as UserMessage
 
 describe("syncSessionModel", () => {
-  test("restores agent and model but not variant", () => {
+  test("restores agent, model and variant from message", () => {
     const calls: unknown[] = []
 
     syncSessionModel(
@@ -42,6 +42,43 @@ describe("syncSessionModel", () => {
         },
       },
       message({ variant: "high" }),
+    )
+
+    expect(calls).toEqual([
+      ["agent", "build"],
+      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
+      ["variant", "high"],
+    ])
+  })
+
+  test("skips variant when message has none", () => {
+    const calls: unknown[] = []
+
+    syncSessionModel(
+      {
+        agent: {
+          current() {
+            return undefined
+          },
+          set(value) {
+            calls.push(["agent", value])
+          },
+        },
+        model: {
+          set(value) {
+            calls.push(["model", value])
+          },
+          current() {
+            return { id: "claude-sonnet-4", provider: { id: "anthropic" } }
+          },
+          variant: {
+            set(value) {
+              calls.push(["variant", value])
+            },
+          },
+        },
+      },
+      message(),
     )
 
     expect(calls).toEqual([

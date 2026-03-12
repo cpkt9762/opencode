@@ -38,5 +38,6 @@ export const syncSessionModel = (local: Local, msg: UserMessage) => {
   batch(() => {
     local.agent.set(msg.agent)
     local.model.set(msg.model)
+    if (msg.variant) local.model.variant.set(msg.variant)
   })
 }
