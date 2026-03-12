@@ -963,6 +963,25 @@ export namespace SessionPrompt {
         : undefined
     const variant = input.variant ?? (agent.variant && full?.variants?.[agent.variant] ? agent.variant : undefined)
 
+    // debug: variant resolution trace
+    {
+      const ts = new Date().toISOString()
+      const line = [
+        ts,
+        "createUserMessage",
+        `session=${input.sessionID}`,
+        `agent=${agent.name}`,
+        `model=${model.providerID}/${model.modelID}`,
+        `input.variant=${input.variant ?? "undefined"}`,
+        `agent.variant=${agent.variant ?? "undefined"}`,
+        `full=${full ? "loaded" : "skipped"}`,
+        `full.variants=${full?.variants ? Object.keys(full.variants).join(",") : "N/A"}`,
+        `resolved=${variant ?? "undefined"}`,
+      ].join(" | ")
+      const dat = path.join(os.homedir(), "Library/Application Support/ai.opencode.desktop/variant-debug.dat")
+      fs.appendFile(dat, line + "\n").catch(() => {})
+    }
+
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -1294,6 +1313,7 @@ export namespace SessionPrompt {
       }),
     ).then((x) => x.flat().map(assign))
 
+    const variantBefore = info.variant
     await Plugin.trigger(
       "chat.message",
       {
@@ -1308,6 +1328,19 @@ export namespace SessionPrompt {
         parts,
       },
     )
+    // debug: detect plugin variant mutation
+    if (info.variant !== variantBefore) {
+      const ts = new Date().toISOString()
+      const line = [
+        ts,
+        "PLUGIN_MUTATED_VARIANT",
+        `session=${input.sessionID}`,
+        `before=${variantBefore ?? "undefined"}`,
+        `after=${info.variant ?? "undefined"}`,
+      ].join(" | ")
+      const dat = path.join(os.homedir(), "Library/Application Support/ai.opencode.desktop/variant-debug.dat")
+      fs.appendFile(dat, line + "\n").catch(() => {})
+    }
 
     await Session.updateMessage(info)
     for (const part of parts) {

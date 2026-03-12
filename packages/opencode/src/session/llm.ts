@@ -64,8 +64,7 @@ export namespace LLM {
     ])
     // auth may be undefined for codex-multi format (not a valid Auth.Info type)
     // fallback to raw key existence check
-    const isCodex =
-      provider.id === "openai" && (auth?.type === "oauth" || (!auth && (await Auth.has("openai"))))
+    const isCodex = provider.id === "openai" && (auth?.type === "oauth" || (!auth && (await Auth.has("openai"))))
 
     const system = []
     system.push(
@@ -97,6 +96,29 @@ export namespace LLM {
 
     const variant =
       !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+
+    // debug: LLM variant application trace
+    if (!input.small) {
+      const ts = new Date().toISOString()
+      const line = [
+        ts,
+        "LLM.stream",
+        `session=${input.sessionID}`,
+        `agent=${input.agent.name}`,
+        `model=${input.model.providerID}/${input.model.id}`,
+        `user.variant=${input.user.variant ?? "undefined"}`,
+        `model.variants=${input.model.variants ? Object.keys(input.model.variants).join(",") : "none"}`,
+        `resolved=${JSON.stringify(variant)}`,
+      ].join(" | ")
+      const dat = require("path").join(
+        require("os").homedir(),
+        "Library/Application Support/ai.opencode.desktop/variant-debug.dat",
+      )
+      require("fs/promises")
+        .appendFile(dat, line + "\n")
+        .catch(() => {})
+    }
+
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
       : ProviderTransform.options({

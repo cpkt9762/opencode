@@ -763,6 +763,24 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
+          {
+            const ts = new Date().toISOString()
+            const line = [
+              ts,
+              "HTTP_prompt",
+              `session=${sessionID}`,
+              `agent=${body.agent ?? "default"}`,
+              `variant=${body.variant ?? "undefined"}`,
+              `model=${body.model ? body.model.providerID + "/" + body.model.modelID : "default"}`,
+            ].join(" | ")
+            const dat = require("path").join(
+              require("os").homedir(),
+              "Library/Application Support/ai.opencode.desktop/variant-debug.dat",
+            )
+            require("fs/promises")
+              .appendFile(dat, line + "\n")
+              .catch(() => {})
+          }
           const msg = await SessionPrompt.prompt({ ...body, sessionID })
           stream.write(JSON.stringify(msg))
         })
@@ -795,6 +813,24 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
+          {
+            const ts = new Date().toISOString()
+            const line = [
+              ts,
+              "HTTP_prompt_async",
+              `session=${sessionID}`,
+              `agent=${body.agent ?? "default"}`,
+              `variant=${body.variant ?? "undefined"}`,
+              `model=${body.model ? body.model.providerID + "/" + body.model.modelID : "default"}`,
+            ].join(" | ")
+            const dat = require("path").join(
+              require("os").homedir(),
+              "Library/Application Support/ai.opencode.desktop/variant-debug.dat",
+            )
+            require("fs/promises")
+              .appendFile(dat, line + "\n")
+              .catch(() => {})
+          }
           SessionPrompt.prompt({ ...body, sessionID })
         })
       },

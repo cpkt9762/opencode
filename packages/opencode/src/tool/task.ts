@@ -125,6 +125,28 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
+      // debug: TaskTool variant trace
+      {
+        const ts = new Date().toISOString()
+        const line = [
+          ts,
+          "TaskTool",
+          `parent=${ctx.sessionID}`,
+          `child=${session.id}`,
+          `agent=${agent.name}`,
+          `agent.variant=${agent.variant ?? "undefined"}`,
+          `model=${model.providerID}/${model.modelID}`,
+          `parent.variant=${msg.info.role === "assistant" ? ((msg.info as any).variant ?? "undefined") : "N/A"}`,
+        ].join(" | ")
+        const datPath = require("path").join(
+          require("os").homedir(),
+          "Library/Application Support/ai.opencode.desktop/variant-debug.dat",
+        )
+        require("fs/promises")
+          .appendFile(datPath, line + "\n")
+          .catch(() => {})
+      }
+
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
