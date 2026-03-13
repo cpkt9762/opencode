@@ -269,6 +269,7 @@ When constructing the summary, try to stick to this template:
           time: { created: Date.now() },
           agent: userMessage.agent,
           model: userMessage.model,
+          variant: userMessage.variant,
         })
         const text =
           (input.overflow
@@ -302,6 +303,7 @@ When constructing the summary, try to stick to this template:
         providerID: ProviderID.zod,
         modelID: ModelID.zod,
       }),
+      variant: z.string().optional(),
       auto: z.boolean(),
       overflow: z.boolean().optional(),
     }),
@@ -310,6 +312,7 @@ When constructing the summary, try to stick to this template:
         id: MessageID.ascending(),
         role: "user",
         model: input.model,
+        variant: input.variant,
         sessionID: input.sessionID,
         agent: input.agent,
         time: {

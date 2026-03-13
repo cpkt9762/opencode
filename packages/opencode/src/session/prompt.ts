@@ -552,6 +552,7 @@ export namespace SessionPrompt {
           sessionID,
           agent: lastUser.agent,
           model: lastUser.model,
+          variant: lastUser.variant,
           auto: true,
         })
         continue
@@ -715,6 +716,7 @@ export namespace SessionPrompt {
           sessionID,
           agent: lastUser.agent,
           model: lastUser.model,
+          variant: lastUser.variant,
           auto: true,
           overflow: !processor.message.finish,
         })
