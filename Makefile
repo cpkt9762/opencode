@@ -45,6 +45,8 @@ install:
 	fi
 	cp -r $(BUNDLE_DIR)/$(APP_NAME) $(INSTALL_DIR)/
 	codesign --force --deep --sign "$(SIGN_IDENTITY)" $(INSTALL_DIR)/$(APP_NAME)
+	cp $(OPENCODE_DIR)/dist/$(OC_DIST)/bin/opencode /opt/homebrew/bin/opencode
+	cp $(OPENCODE_DIR)/dist/$(OC_DIST)/bin/opencode $(HOME)/.opencode/bin/opencode
 	@echo "Installed and signed. Run 'brew pin opencode-desktop' to prevent brew overwrite."
 
 # Restore official version

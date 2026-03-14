@@ -217,7 +217,8 @@ export namespace Agent {
           options: {},
           native: false,
         }
-      if (value.model) item.model = Provider.parseModel(value.model)
+      if (value.model && typeof value.model === "string") item.model = Provider.parseModel(value.model)
+      else if (value.model && typeof value.model === "object") item.model = value.model as { providerID: ProviderID; modelID: ModelID }
       item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
