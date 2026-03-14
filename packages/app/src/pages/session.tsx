@@ -448,7 +448,7 @@ export default function Page() {
   })
 
   const userMessages = createMemo(
-    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    () => messages().filter((m) => !!m && m.role === "user") as UserMessage[],
     emptyUserMessages,
     { equals: same },
   )
@@ -456,7 +456,7 @@ export default function Page() {
     () => {
       const revert = revertMessageID()
       if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
+      return userMessages().filter((m) => !!m && m.id < revert)
     },
     emptyUserMessages,
     {
