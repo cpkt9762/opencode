@@ -204,19 +204,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
-    const pending = (sessionStore.message[props.session.id] ?? []).findLast(
-      (message) =>
-        message.role === "assistant" &&
-        typeof (message as { time?: { completed?: unknown } }).time?.completed !== "number" &&
-        !(message as { error?: unknown }).error,
-    )
     const status = sessionStore.session_status[props.session.id]
-    return (
-      pending !== undefined ||
-      status?.type === "busy" ||
-      status?.type === "retry" ||
-      (status !== undefined && status.type !== "idle")
-    )
+    return status?.type === "busy" || status?.type === "retry"
   })
 
   const tint = createMemo(() => {

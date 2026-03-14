@@ -382,7 +382,10 @@ export namespace SessionProcessor {
                 sessionID: input.assistantMessage.sessionID,
                 error: input.assistantMessage.error,
               })
-              SessionStatus.set(input.sessionID, { type: "idle" })
+              SessionStatus.set(input.sessionID, {
+                type: "idle",
+                reason: error.name === "MessageAbortedError" ? "aborted" : "error",
+              })
             }
           }
           if (snapshot) {
