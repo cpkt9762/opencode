@@ -7,10 +7,14 @@ import { Effect, Layer, ServiceMap } from "effect"
 import z from "zod"
 
 export namespace SessionStatus {
+  export const IdleReason = z.enum(["completed", "aborted", "error"])
+  export type IdleReason = z.infer<typeof IdleReason>
+
   export const Info = z
     .union([
       z.object({
         type: z.literal("idle"),
+        reason: IdleReason.optional(),
       }),
       z.object({
         type: z.literal("retry"),
@@ -72,7 +76,9 @@ export namespace SessionStatus {
         const data = yield* InstanceState.get(state)
         yield* Effect.promise(() => Bus.publish(Event.Status, { sessionID, status }))
         if (status.type === "idle") {
-          yield* Effect.promise(() => Bus.publish(Event.Idle, { sessionID }))
+          if (!status.reason || status.reason === "completed") {
+            yield* Effect.promise(() => Bus.publish(Event.Idle, { sessionID }))
+          }
           data.delete(sessionID)
           return
         }

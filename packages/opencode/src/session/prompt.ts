@@ -257,17 +257,21 @@ export namespace SessionPrompt {
     return s[sessionID].abort.signal
   }
 
-  export async function cancel(sessionID: SessionID) {
+  export async function cancel(sessionID: SessionID, reason: SessionStatus.IdleReason = "aborted") {
     log.info("cancel", { sessionID })
+    const idle = async () => {
+      if ((await SessionStatus.get(sessionID)).type === "idle") return
+      await SessionStatus.set(sessionID, { type: "idle", reason })
+    }
     const s = state()
     const match = s[sessionID]
     if (!match) {
-      await SessionStatus.set(sessionID, { type: "idle" })
+      await idle()
       return
     }
     match.abort.abort()
     delete s[sessionID]
-    await SessionStatus.set(sessionID, { type: "idle" })
+    await idle()
     return
   }
 
@@ -286,7 +290,8 @@ export namespace SessionPrompt {
       })
     }
 
-    await using _ = defer(() => cancel(sessionID))
+    let reason: SessionStatus.IdleReason = "completed"
+    await using _ = defer(() => cancel(sessionID, reason))
 
     // Structured output state
     // Note: On session resumption, state is reset but outputFormat is preserved
@@ -298,7 +303,10 @@ export namespace SessionPrompt {
     while (true) {
       await SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
-      if (abort.aborted) break
+      if (abort.aborted) {
+        reason = "aborted"
+        break
+      }
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
       let lastUser: MessageV2.User | undefined
@@ -539,7 +547,10 @@ export namespace SessionPrompt {
           auto: task.auto,
           overflow: task.overflow,
         })
-        if (result === "stop") break
+        if (result === "stop") {
+          reason = abort.aborted ? "aborted" : "completed"
+          break
+        }
         continue
       }
 
@@ -707,11 +718,19 @@ export namespace SessionPrompt {
             retries: 0,
           }).toObject()
           await Session.updateMessage(processor.message)
+          reason = "error"
           break
         }
       }
 
-      if (result === "stop") break
+      if (result === "stop") {
+        if (processor.message.error?.name === "MessageAbortedError") {
+          reason = "aborted"
+        } else if (processor.message.error) {
+          reason = "error"
+        }
+        break
+      }
       if (result === "compact") {
         await SessionCompaction.create({
           sessionID,
