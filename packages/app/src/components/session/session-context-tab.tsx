@@ -109,7 +109,7 @@ export function SessionContextTab() {
   )
 
   const userMessages = createMemo(
-    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    () => messages().filter((m) => !!m && m.role === "user") as UserMessage[],
     emptyUserMessages,
     { equals: same },
   )
@@ -118,7 +118,7 @@ export function SessionContextTab() {
     () => {
       const revert = info()?.revert?.messageID
       if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
+      return userMessages().filter((m) => !!m && m.id < revert)
     },
     emptyUserMessages,
     { equals: same },
@@ -174,7 +174,7 @@ export function SessionContextTab() {
 
   const breakdown = createMemo(
     on(
-      () => [ctx()?.message.id, ctx()?.input, messages().length, systemPrompt()],
+      () => [ctx()?.message?.id, ctx()?.input, messages().length, systemPrompt()],
       () => {
         const c = ctx()
         if (!c?.input) return []
@@ -215,7 +215,7 @@ export function SessionContextTab() {
     { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
     { label: "context.stats.totalCost", value: cost },
     { label: "context.stats.sessionCreated", value: () => formatter().time(info()?.time.created) },
-    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
+    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message?.time?.created) },
   ] satisfies { label: string; value: () => JSX.Element }[]
 
   let scroll: HTMLDivElement | undefined
@@ -328,7 +328,7 @@ export function SessionContextTab() {
         <div class="flex flex-col gap-2">
           <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
           <Accordion multiple>
-            <For each={messages()}>
+            <For each={messages().filter((m) => !!m)}>
               {(message) => (
                 <RawMessage message={message} getParts={getParts} onRendered={restoreScroll} time={formatter().time} />
               )}
