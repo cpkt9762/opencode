@@ -131,15 +131,13 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
       fn()
       return
     }
-    const prev = el.style.overflowAnchor
-    el.style.overflowAnchor = "none"
+    const beforeTop = el.scrollTop
     const beforeHeight = el.scrollHeight
     fn()
     requestAnimationFrame(() => {
       const delta = el.scrollHeight - beforeHeight
-      el.style.overflowAnchor = prev
       if (!delta) return
-      el.scrollTop += delta
+      el.scrollTop = beforeTop + delta
     })
   }
 
