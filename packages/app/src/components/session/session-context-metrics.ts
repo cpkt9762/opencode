@@ -41,6 +41,7 @@ const tokenTotal = (msg: AssistantMessage) => {
 const lastAssistantWithTokens = (messages: Message[]) => {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
+    if (!msg) continue
     if (msg.role !== "assistant") continue
     if (tokenTotal(msg) <= 0) continue
     return msg
@@ -48,7 +49,7 @@ const lastAssistantWithTokens = (messages: Message[]) => {
 }
 
 const build = (messages: Message[] = [], providers: Provider[] = []): Metrics => {
-  const totalCost = messages.reduce((sum, msg) => sum + (msg.role === "assistant" ? msg.cost : 0), 0)
+  const totalCost = messages.reduce((sum, msg) => sum + (msg?.role === "assistant" ? msg.cost : 0), 0)
   const message = lastAssistantWithTokens(messages)
   if (!message) return { totalCost, context: undefined }
 

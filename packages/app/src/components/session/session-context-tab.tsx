@@ -140,8 +140,8 @@ export function SessionContextTab() {
 
   const counts = createMemo(() => {
     const all = messages()
-    const user = all.reduce((count, x) => count + (x.role === "user" ? 1 : 0), 0)
-    const assistant = all.reduce((count, x) => count + (x.role === "assistant" ? 1 : 0), 0)
+    const user = all.reduce((count, x) => count + (x?.role === "user" ? 1 : 0), 0)
+    const assistant = all.reduce((count, x) => count + (x?.role === "assistant" ? 1 : 0), 0)
     return {
       all: all.length,
       user,

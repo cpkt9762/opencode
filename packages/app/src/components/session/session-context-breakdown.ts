@@ -77,6 +77,7 @@ export function estimateSessionContextBreakdown(args: {
 
   const counts = args.messages.reduce(
     (acc, msg) => {
+      if (!msg) return acc
       const parts = args.parts[msg.id] ?? []
       if (msg.role === "user") {
         const user = parts.reduce((sum, part) => sum + charsFromUserPart(part), 0)
