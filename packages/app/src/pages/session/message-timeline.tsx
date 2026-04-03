@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, Index, type JSX } from "solid-js"
+import { For, createEffect, createMemo, on, onCleanup, Show, Index, type JSX, createSignal } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
@@ -30,6 +30,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { messageAgentColor } from "@/utils/agent"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
+import { makeTimer } from "@solid-primitives/timer"
 
 type MessageComment = {
   path: string
@@ -230,9 +231,7 @@ export function MessageTimeline(props: {
   const { params, sessionKey } = useSessionKey()
   const platform = usePlatform()
 
-  const rendered = createMemo(() =>
-    props.renderedUserMessages.filter((message) => !!message).map((message) => message.id),
-  )
+  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
@@ -241,8 +240,7 @@ export function MessageTimeline(props: {
   })
   const pending = createMemo(() =>
     sessionMessages().findLast(
-      (item): item is AssistantMessage =>
-        !!item && item.role === "assistant" && typeof item.time.completed !== "number",
+      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
     ),
   )
   const sessionStatus = createMemo(() => {
@@ -253,38 +251,21 @@ export function MessageTimeline(props: {
   const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
-  const [slot, setSlot] = createStore({
-    open: false,
-    show: false,
-    fade: false,
+  const [timeoutDone, setTimeoutDone] = createSignal(true)
+
+  const workingStatus = createMemo<"hidden" | "showing" | "hiding">((prev) => {
+    if (working()) return "showing"
+    if (prev === "showing" || !timeoutDone()) return "hiding"
+    return "hidden"
   })
 
-  let f: number | undefined
-  const clear = () => {
-    if (f !== undefined) window.clearTimeout(f)
-    f = undefined
-  }
+  createEffect(() => {
+    if (workingStatus() !== "hiding") return
 
-  onCleanup(clear)
-  createEffect(
-    on(
-      working,
-      (on, prev) => {
-        clear()
-        if (on) {
-          setSlot({ open: true, show: true, fade: false })
-          return
-        }
-        if (prev) {
-          setSlot({ open: false, show: true, fade: true })
-          f = window.setTimeout(() => setSlot({ show: false, fade: false }), 260)
-          return
-        }
-        setSlot({ open: false, show: false, fade: false })
-      },
-      { defer: true },
-    ),
-  )
+    setTimeoutDone(false)
+    makeTimer(() => setTimeoutDone(true), 260, setTimeout)
+  })
+
   const activeMessageID = createMemo(() => {
     const parentID = pending()?.parentID
     if (parentID) {
@@ -298,9 +279,7 @@ export function MessageTimeline(props: {
     if (status.type !== "idle") {
       const messages = sessionMessages()
       for (let i = messages.length - 1; i >= 0; i--) {
-        const msg = messages[i]
-        if (!msg) continue
-        if (msg.role === "user") return msg.id
+        if (messages[i].role === "user") return messages[i].id
       }
     }
 
@@ -596,7 +575,6 @@ export function MessageTimeline(props: {
           }}
         >
           <button
-            type="button"
             class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
             onClick={props.onResumeScroll}
           >
@@ -682,17 +660,15 @@ export function MessageTimeline(props: {
                       <div
                         class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
                         style={{
-                          width: slot.open ? "16px" : "0px",
-                          "margin-right": slot.open ? "8px" : "0px",
+                          width: working() ? "16px" : "0px",
+                          "margin-right": working() ? "8px" : "0px",
                         }}
                         aria-hidden="true"
                       >
-                        <Show when={slot.show}>
+                        <Show when={workingStatus() !== "hidden"}>
                           <div
                             class="transition-opacity duration-200 ease-out"
-                            classList={{
-                              "opacity-0": slot.fade,
-                            }}
+                            classList={{ "opacity-0": workingStatus() === "hiding" }}
                           >
                             <Spinner class="size-4" style={{ color: tint() ?? "var(--icon-interactive-base)" }} />
                           </div>
@@ -918,10 +894,10 @@ export function MessageTimeline(props: {
                 </div>
               </div>
             </Show>
-
             <div
               role="log"
-              class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+              data-slot="session-turn-list"
+              class="flex flex-col items-start justify-start pb-16 transition-[margin]"
               classList={{
                 "w-full": true,
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
@@ -948,7 +924,15 @@ export function MessageTimeline(props: {
                 {(messageID) => {
                   const active = createMemo(() => activeMessageID() === messageID)
                   const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
-                    equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+                    equals: (a, b) =>
+                      a.length === b.length &&
+                      a.every(
+                        (c, i) =>
+                          c.path === b[i].path &&
+                          c.comment === b[i].comment &&
+                          c.selection?.startLine === b[i].selection?.startLine &&
+                          c.selection?.endLine === b[i].selection?.endLine,
+                      ),
                   })
                   const commentCount = createMemo(() => comments().length)
                   return (
@@ -958,6 +942,10 @@ export function MessageTimeline(props: {
                       classList={{
                         "min-w-0 w-full max-w-full": true,
                         "md:max-w-200 2xl:max-w-[1000px]": props.centered,
+                      }}
+                      style={{
+                        "content-visibility": active() ? undefined : "auto",
+                        "contain-intrinsic-size": active() ? undefined : "auto 500px",
                       }}
                     >
                       <Show when={commentCount() > 0}>
@@ -1003,6 +991,7 @@ export function MessageTimeline(props: {
                       <SessionTurn
                         sessionID={sessionID() ?? ""}
                         messageID={messageID}
+                        messages={sessionMessages()}
                         actions={props.actions}
                         active={active()}
                         status={active() ? sessionStatus() : undefined}
