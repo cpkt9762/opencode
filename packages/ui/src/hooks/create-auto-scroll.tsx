@@ -18,6 +18,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let auto: { top: number; time: number } | undefined
   let height: number | undefined
   let anchorFrame: number | undefined
+  let wheelNear = 0
 
   const threshold = () => options.bottomThreshold ?? 10
 
@@ -134,7 +135,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (el && nested && nested !== el) return
     // Don't break auto-follow for small scrolls near the bottom;
     // let handleScroll decide after the position settles.
-    if (el && distanceFromBottom(el) <= threshold()) return
+    if (el && distanceFromBottom(el) <= threshold()) {
+      wheelNear = Date.now()
+      return
+    }
     stop()
   }
 
@@ -166,6 +170,14 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     // Ignore scroll events triggered by our own scrollToBottom calls.
     if (!store.userScrolled && isAuto(el)) {
+      scrollToBottom(false)
+      return
+    }
+
+    // handleWheel recently blocked a stop near the bottom — inertia
+    // may have carried scrollTop just past the threshold. Re-anchor
+    // instead of breaking auto-follow.
+    if (!store.userScrolled && Date.now() - wheelNear < 150) {
       scrollToBottom(false)
       return
     }
