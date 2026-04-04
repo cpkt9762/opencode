@@ -223,7 +223,9 @@ export function createAutoScroll(options: AutoScrollOptions) {
       const prev = height
       height = el.scrollHeight
       if (!canScroll(el)) {
-        if (store.userScrolled) setStore("userScrolled", false)
+        // Don't clear userScrolled on transient content shrinks (DOM rebuilds
+        // during turn backfill can briefly make scrollHeight < clientHeight)
+        if (store.userScrolled && !(prev !== undefined && height < prev)) setStore("userScrolled", false)
         return
       }
       if (!active()) return

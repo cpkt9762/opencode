@@ -1,46 +1,47 @@
 import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
+import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useMutation } from "@tanstack/solid-query"
-import {
-  batch,
-  onCleanup,
-  Show,
-  Match,
-  Switch,
-  createMemo,
-  createEffect,
-  createComputed,
-  on,
-  onMount,
-  untrack,
-} from "solid-js"
-import { makeEventListener } from "@solid-primitives/event-listener"
-import { createMediaQuery } from "@solid-primitives/media"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { useLocal } from "@/context/local"
-import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
-import { createStore } from "solid-js/store"
+import { scrollLog } from "@opencode-ai/ui/debug/dat-logger"
+import { createAutoScroll } from "@opencode-ai/ui/hooks"
+import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { createAutoScroll } from "@opencode-ai/ui/hooks"
-import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
-import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/util/encode"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { createMediaQuery } from "@solid-primitives/media"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useSearchParams } from "@solidjs/router"
+import { useMutation } from "@tanstack/solid-query"
+import {
+  batch,
+  createComputed,
+  createEffect,
+  createMemo,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js"
+import { createStore } from "solid-js/store"
+import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
-import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
+import { type FileSelection, type SelectedLineRange, selectionFromLines, useFile } from "@/context/file"
 import { useGlobalSync } from "@/context/global-sync"
+import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useLocal } from "@/context/local"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
   createOpenReviewFile,
@@ -145,10 +146,21 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     const beforeTop = el.scrollTop
     const beforeHeight = el.scrollHeight
     fn()
-    requestAnimationFrame(() => {
-      const delta = el.scrollHeight - beforeHeight
-      if (!delta) return
-      el.scrollTop = beforeTop + delta
+    // Synchronous adjustment — SolidJS renders synchronously so
+    // scrollHeight already reflects the final DOM after fn().
+    // Deferring to rAF leaves a 1-frame gap where scrollTop is wrong,
+    // causing a visible jump (scroll-to-bottom then snap back).
+    const delta = el.scrollHeight - beforeHeight
+    if (delta) el.scrollTop = beforeTop + delta
+    scrollLog("session.preserveScroll", {
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+      distBottom: el.scrollHeight - el.clientHeight - el.scrollTop,
+      userScrolled: input.userScrolled(),
+      isAuto: !input.userScrolled(),
+      trigger: "preserveScroll",
+      extra: `beforeTop=${beforeTop} beforeHeight=${beforeHeight} afterTop=${el.scrollTop} delta=${delta}`,
     })
   }
 
@@ -326,7 +338,9 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
-  const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const [searchParams, setSearchParams] = useSearchParams<{
+    prompt?: string
+  }>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
 
   createEffect(() => {
@@ -436,8 +450,6 @@ export default function Page() {
     review: reviewTab,
     hasReview,
   })
-  const contextOpen = tabState.contextOpen
-  const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
@@ -808,7 +820,10 @@ export default function Page() {
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
     if (!content) return undefined
-    return previewSelectedLines(content, { start: selection.startLine, end: selection.endLine })
+    return previewSelectedLines(content, {
+      start: selection.startLine,
+      end: selection.endLine,
+    })
   }
 
   const addCommentToContext = (input: {
@@ -1249,6 +1264,18 @@ export default function Page() {
     const max = el.scrollHeight - el.clientHeight
     const overflow = max > 1
     const bottom = !overflow || el.scrollTop >= max - 2
+    const scrolled = autoScroll.userScrolled()
+
+    scrollLog("session.updateScrollState", {
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+      distBottom: el.scrollHeight - el.clientHeight - el.scrollTop,
+      userScrolled: scrolled,
+      isAuto: !scrolled,
+      trigger: "updateScrollState",
+      extra: `overflow=${overflow} bottom=${bottom}`,
+    })
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
     setUi("scroll", { overflow, bottom })
@@ -1494,14 +1521,23 @@ export default function Page() {
     setFollowup("paused", draft.sessionID, undefined)
   }
 
-  const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
+  const followupDock = createMemo(() =>
+    queuedFollowups().map((item) => ({
+      id: item.id,
+      text: followupText(item),
+    })),
+  )
 
   const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
     const item = (followup.items[sessionID] ?? []).find((entry) => entry.id === id)
     if (!item) return Promise.resolve()
     if (followupBusy(sessionID)) return Promise.resolve()
 
-    return followupMutation.mutateAsync({ sessionID, id, manual: opts?.manual })
+    return followupMutation.mutateAsync({
+      sessionID,
+      id,
+      manual: opts?.manual,
+    })
   }
 
   const editFollowup = (id: string) => {
@@ -1723,7 +1759,9 @@ export default function Page() {
                 onClick={() => setStore("mobileTab", "changes")}
               >
                 {hasReview()
-                  ? language.t("session.review.filesChanged", { count: reviewCount() })
+                  ? language.t("session.review.filesChanged", {
+                      count: reviewCount(),
+                    })
                   : language.t("session.review.change.other")}
               </Tabs.Trigger>
             </Tabs.List>
@@ -1821,7 +1859,9 @@ export default function Page() {
                       setFollowup("paused", id, true)
                     },
                     onSend: (id) => {
-                      void sendFollowup(params.id!, id, { manual: true })
+                      const sid = params.id
+                      if (!sid) return
+                      void sendFollowup(sid, id, { manual: true })
                     },
                     onEdit: editFollowup,
                     onEditLoaded: clearFollowupEdit,
