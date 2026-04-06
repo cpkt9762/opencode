@@ -1,0 +1,181 @@
+--- a/dist/index.js
++++ b/dist/index.js
+# Variant inheritance for all promptAsync call paths
+# Complements PR #1275 (https://github.com/code-yeongyu/oh-my-openagent/pull/1275)
+# PR #1275 covers: background-agent notifyParentSession + atlas boulder continuation + keyword-detector + index.ts
+# This patch covers ADDITIONAL paths PR #1275 does NOT fix:
+#   - todo-continuation-enforcer
+#   - session-recovery (resumeSession)
+#   - ralph-loop continuation
+#   - resolveRecentPromptContextForSession (return value + fallback)
+#   - resolveMainSessionTarget (return value)
+#   - babysitter reminder
+#
+# NOTE: If PR #1275 is merged AND covers all paths, this patch may become redundant.
+#       After OMO update, verify before applying.
+
+###############################################################################
+# 1. todo-continuation-enforcer
+#    Search: "incompleteCount: freshIncompleteCount"
+#    The model object has .variant but spreading model into body loses it
+#    (OpenCode only reads providerID/modelID from body.model, not variant)
+###############################################################################
+@@ todo-continuation-enforcer @@
+     incompleteCount: freshIncompleteCount
+   });
+   const inheritedTools = resolveInheritedPromptTools(sessionID, tools);
++    const _variant20070 = model?.variant;
+   await ctx.client.session.promptAsync({
+     path: { id: sessionID },
+     body: {
+       agent: agentName,
+-        ...model !== undefined ? { model } : {},
++        ...model !== undefined ? { model: { providerID: model.providerID, modelID: model.modelID } } : {},
++        ..._variant20070 ? { variant: _variant20070 } : {},
+       ...inheritedTools ? { tools: inheritedTools } : {},
+
+###############################################################################
+# 2. session-recovery — extractResumeConfig + resumeSession
+#    Search: "agent: userMessage?.info?.agent"
+###############################################################################
+@@ session-recovery extractResumeConfig @@
+   sessionID,
+   agent: userMessage?.info?.agent,
+   model: userMessage?.info?.model,
++    variant: userMessage?.info?.variant,
+   tools: userMessage?.info?.tools
+
+@@ session-recovery resumeSession @@
+       parts: [createInternalAgentTextPart(RECOVERY_RESUME_TEXT)],
+       agent: config.agent,
+       model: config.model,
++        ...config.variant ? { variant: config.variant } : {},
+       ...inheritedTools ? { tools: inheritedTools } : {}
+
+###############################################################################
+# 3. ralph-loop continuation (injectContinuationPrompt)
+#    Search: "async function injectContinuationPrompt"
+###############################################################################
+@@ ralph-loop — variable declaration @@
+ async function injectContinuationPrompt(ctx, options) {
+   let agent;
+   let model;
++  let variant;
+   let tools;
+
+@@ ralph-loop — SDK path: read variant from info @@
+       if (info?.agent || info?.model || info?.modelID && info?.providerID) {
+         agent = info.agent;
+         model = info.model ?? (info.providerID && info.modelID ? { providerID: info.providerID, modelID: info.modelID } : undefined);
++        variant = info.variant;
+         tools = info.tools;
+
+@@ ralph-loop — file fallback path @@
+       providerID: currentMessage.model.providerID,
+       modelID: currentMessage.model.modelID
+     } : undefined;
++    variant = currentMessage?.variant;
+     tools = currentMessage?.tools;
+
+@@ ralph-loop — promptAsync body @@
+     body: {
+       ...agent !== undefined ? { agent } : {},
+       ...model !== undefined ? { model } : {},
++      ...variant ? { variant } : {},
+       ...inheritedTools ? { tools: inheritedTools } : {},
+
+###############################################################################
+# 4. resolveRecentPromptContextForSession — return variant in all paths
+#    Search: "async function resolveRecentPromptContextForSession"
+###############################################################################
+@@ resolveRecentPromptContext — SDK model2 path @@
+-        return { model: { providerID: model2.providerID, modelID: model2.modelID }, tools: tools2 };
++        return { model: { providerID: model2.providerID, modelID: model2.modelID }, variant: info?.variant, tools: tools2 };
+
+@@ resolveRecentPromptContext — SDK info path @@
+-        return { model: { providerID: info.providerID, modelID: info.modelID }, tools: tools2 };
++        return { model: { providerID: info.providerID, modelID: info.modelID }, variant: info?.variant, tools: tools2 };
+
+@@ resolveRecentPromptContext — fallback no-model path @@
+-    return { tools };
++    return { variant: currentMessage?.variant, tools };
+
+@@ resolveRecentPromptContext — fallback with-model path @@
+-  return { model: { providerID: model.providerID, modelID: model.modelID }, tools };
++  return { model: { providerID: model.providerID, modelID: model.modelID }, variant: currentMessage?.variant, tools };
+
+###############################################################################
+# 5. boulder continuation — pass variant from promptContext
+#    Search: "agent: agent ?? \"atlas\""
+###############################################################################
+@@ boulder-continuation promptAsync body @@
+       agent: agent ?? "atlas",
+       ...promptContext.model !== undefined ? { model: promptContext.model } : {},
++        ...promptContext.variant ? { variant: promptContext.variant } : {},
+       ...inheritedTools ? { tools: inheritedTools } : {},
+
+###############################################################################
+# 6. resolveMainSessionTarget — return variant
+#    Search: "async function resolveMainSessionTarget"
+###############################################################################
+@@ resolveMainSessionTarget — variable declaration @@
+ async function resolveMainSessionTarget(ctx, sessionID) {
+   let agent = getSessionAgent(sessionID);
+   let model;
++  let variant;
+   let tools;
+
+@@ resolveMainSessionTarget — read variant from info @@
+       if (info?.agent || info?.model || info?.providerID && info?.modelID) {
+         agent = agent ?? info?.agent;
+         model = info?.model ?? (info?.providerID && info?.modelID ? { providerID: info.providerID, modelID: info.modelID } : undefined);
++        variant = info?.variant;
+         tools = resolveInheritedPromptTools(sessionID, info?.tools) ?? tools;
+
+@@ resolveMainSessionTarget — return value @@
+-  return { agent, model, tools: resolveInheritedPromptTools(sessionID, tools) };
++  return { agent, model, variant, tools: resolveInheritedPromptTools(sessionID, tools) };
+
+###############################################################################
+# 7. babysitter reminder — pass variant
+#    Search: "const { agent, model, tools } = await resolveMainSessionTarget"
+###############################################################################
+@@ babysitter — destructure variant @@
+-      const { agent, model, tools } = await resolveMainSessionTarget(ctx, mainSessionID);
++      const { agent, model, variant, tools } = await resolveMainSessionTarget(ctx, mainSessionID);
+
+@@ babysitter — promptAsync body @@
+             ...agent ? { agent } : {},
+             ...model ? { model } : {},
++            ...variant ? { variant } : {},
+             ...tools ? { tools } : {},
+
+###############################################################################
+# 8. notifyParentSession — read and pass variant (both SDK + fallback paths)
+#    Search: "let agent = task.parentAgent" (inside notifyParentSession)
+###############################################################################
+@@ notifyParentSession — variable declaration @@
+     let agent = task.parentAgent;
+     let model;
++    let variant;
+     let tools = task.parentTools;
+
+@@ notifyParentSession — SDK path: read variant @@
+           if (info?.agent || info?.model || info?.modelID && info?.providerID || normalizedTools) {
+             agent = info?.agent ?? task.parentAgent;
+             model = info?.model ?? (info?.providerID && info?.modelID ? { providerID: info.providerID, modelID: info.modelID } : undefined);
++            variant = info?.variant;
+             tools = normalizedTools ?? tools;
+
+@@ notifyParentSession — catch fallback path @@
+         agent = currentMessage?.agent ?? task.parentAgent;
+         model = currentMessage?.model?.providerID && currentMessage?.model?.modelID ? { providerID: currentMessage.model.providerID, modelID: currentMessage.model.modelID } : undefined;
++        variant = currentMessage?.variant;
+         tools = normalizePromptTools(currentMessage?.tools) ?? tools;
+
+@@ notifyParentSession — promptAsync body @@
+             noReply: !allComplete,
+             ...agent !== undefined ? { agent } : {},
+             ...model !== undefined ? { model } : {},
++            ...variant ? { variant } : {},
+             ...resolvedTools ? { tools: resolvedTools } : {},

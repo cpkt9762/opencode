@@ -5,6 +5,7 @@ declare global {
   interface Window {
     __OPENCODE_CRASH_LOG__?: typeof log
     __OPENCODE_DEBUG__?: (tag: string, data: Record<string, unknown>) => void
+    __OPENCODE_SCROLL_LOG__?: (event: string, data: Record<string, unknown>) => void
   }
 }
 
@@ -131,9 +132,25 @@ async function debugLog(tag: string, data: Record<string, unknown>) {
   }
 }
 
+let scrollStore: Awaited<ReturnType<typeof Store.load>> | undefined
+const SCROLL_MAX = 5000
+
+async function scrollLog(event: string, data: Record<string, unknown>) {
+  scrollStore ??= await Store.load("scroll-debug.dat").catch(() => undefined)
+  if (!scrollStore) return
+  const ts = Date.now()
+  const key = `${ts}-${Math.random().toString(36).slice(2, 6)}`
+  await scrollStore.set(key, JSON.stringify({ event, ...data, ts })).catch(() => undefined)
+  const keys = await scrollStore.keys().catch(() => [] as string[])
+  if (keys.length > SCROLL_MAX) {
+    for (const k of keys.sort().slice(0, keys.length - SCROLL_MAX)) await scrollStore.delete(k).catch(() => undefined)
+  }
+}
+
 export function init() {
   window.__OPENCODE_CRASH_LOG__ = log
   window.__OPENCODE_DEBUG__ = debugLog
+  window.__OPENCODE_SCROLL_LOG__ = scrollLog
   window.addEventListener("error", (e) => void log("error", e.error ?? e.message))
   window.addEventListener("unhandledrejection", (e) => void log("rejection", e.reason))
 

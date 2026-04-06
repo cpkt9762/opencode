@@ -1,0 +1,20 @@
+--- a/dist/index.js
++++ b/dist/index.js
+# Issue #2491: Make TASK_TTL_MS and TASK_CLEANUP_DELAY_MS configurable
+# https://github.com/code-yeongyu/oh-my-openagent/issues/2491
+#
+# TASK_TTL_MS:           30min → 120min (prevent long-running tasks from being GC'd)
+# TASK_CLEANUP_DELAY_MS: 10min → 30min  (give parent session more time to collect results)
+#
+# Search anchor: // src/features/background-agent/constants.ts
+@@ background-agent/constants.ts @@
+-var TASK_TTL_MS = 30 * 60 * 1000;
++var TASK_TTL_MS = 120 * 60 * 1000;
+ var MIN_STABILITY_TIME_MS2 = 10 * 1000;
+ var DEFAULT_STALE_TIMEOUT_MS = 180000;
+ var DEFAULT_MESSAGE_STALENESS_TIMEOUT_MS = 600000;
+ var MIN_RUNTIME_BEFORE_STALE_MS = 30000;
+ var MIN_IDLE_TIME_MS = 5000;
+ var POLLING_INTERVAL_MS = 3000;
+-var TASK_CLEANUP_DELAY_MS = 10 * 60 * 1000;
++var TASK_CLEANUP_DELAY_MS = 30 * 60 * 1000;

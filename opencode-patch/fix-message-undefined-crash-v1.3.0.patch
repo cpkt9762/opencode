@@ -1,0 +1,113 @@
+diff -ruN a/packages/app/src/components/session/session-context-breakdown.ts b/packages/app/src/components/session/session-context-breakdown.ts
+--- a/packages/app/src/components/session/session-context-breakdown.ts	2026-03-24 02:02:58
++++ b/packages/app/src/components/session/session-context-breakdown.ts	2026-03-24 02:04:12
+@@ -77,6 +77,7 @@
+ 
+   const counts = args.messages.reduce(
+     (acc, msg) => {
++      if (!msg) return acc
+       const parts = args.parts[msg.id] ?? []
+       if (msg.role === "user") {
+         const user = parts.reduce((sum, part) => sum + charsFromUserPart(part), 0)
+diff -ruN a/packages/app/src/components/session/session-context-metrics.ts b/packages/app/src/components/session/session-context-metrics.ts
+--- a/packages/app/src/components/session/session-context-metrics.ts	2026-03-24 02:02:58
++++ b/packages/app/src/components/session/session-context-metrics.ts	2026-03-24 02:04:03
+@@ -41,6 +41,7 @@
+ const lastAssistantWithTokens = (messages: Message[]) => {
+   for (let i = messages.length - 1; i >= 0; i--) {
+     const msg = messages[i]
++    if (!msg) continue
+     if (msg.role !== "assistant") continue
+     if (tokenTotal(msg) <= 0) continue
+     return msg
+@@ -48,7 +49,7 @@
+ }
+ 
+ const build = (messages: Message[] = [], providers: Provider[] = []): Metrics => {
+-  const totalCost = messages.reduce((sum, msg) => sum + (msg.role === "assistant" ? msg.cost : 0), 0)
++  const totalCost = messages.reduce((sum, msg) => sum + (msg?.role === "assistant" ? msg.cost : 0), 0)
+   const message = lastAssistantWithTokens(messages)
+   if (!message) return { totalCost, context: undefined }
+ 
+diff -ruN a/packages/app/src/components/session/session-context-tab.tsx b/packages/app/src/components/session/session-context-tab.tsx
+--- a/packages/app/src/components/session/session-context-tab.tsx	2026-03-24 02:02:58
++++ b/packages/app/src/components/session/session-context-tab.tsx	2026-03-24 02:03:46
+@@ -107,7 +107,7 @@
+   )
+ 
+   const userMessages = createMemo(
+-    () => messages().filter((m) => m.role === "user") as UserMessage[],
++    () => messages().filter((m) => !!m && m.role === "user") as UserMessage[],
+     emptyUserMessages,
+     { equals: same },
+   )
+@@ -116,7 +116,7 @@
+     () => {
+       const revert = info()?.revert?.messageID
+       if (!revert) return userMessages()
+-      return userMessages().filter((m) => m.id < revert)
++      return userMessages().filter((m) => !!m && m.id < revert)
+     },
+     emptyUserMessages,
+     { equals: same },
+@@ -140,8 +140,8 @@
+ 
+   const counts = createMemo(() => {
+     const all = messages()
+-    const user = all.reduce((count, x) => count + (x.role === "user" ? 1 : 0), 0)
+-    const assistant = all.reduce((count, x) => count + (x.role === "assistant" ? 1 : 0), 0)
++    const user = all.reduce((count, x) => count + (x?.role === "user" ? 1 : 0), 0)
++    const assistant = all.reduce((count, x) => count + (x?.role === "assistant" ? 1 : 0), 0)
+     return {
+       all: all.length,
+       user,
+@@ -172,7 +172,7 @@
+ 
+   const breakdown = createMemo(
+     on(
+-      () => [ctx()?.message.id, ctx()?.input, messages().length, systemPrompt()],
++      () => [ctx()?.message?.id, ctx()?.input, messages().length, systemPrompt()],
+       () => {
+         const c = ctx()
+         if (!c?.input) return []
+@@ -213,7 +213,7 @@
+     { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
+     { label: "context.stats.totalCost", value: cost },
+     { label: "context.stats.sessionCreated", value: () => formatter().time(info()?.time.created) },
+-    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
++    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message?.time?.created) },
+   ] satisfies { label: string; value: () => JSX.Element }[]
+ 
+   let scroll: HTMLDivElement | undefined
+@@ -326,7 +326,7 @@
+         <div class="flex flex-col gap-2">
+           <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
+           <Accordion multiple>
+-            <For each={messages()}>
++            <For each={messages().filter((m) => !!m)}>
+               {(message) => (
+                 <RawMessage message={message} getParts={getParts} onRendered={restoreScroll} time={formatter().time} />
+               )}
+diff -ruN a/packages/app/src/pages/session/message-timeline.tsx b/packages/app/src/pages/session/message-timeline.tsx
+--- a/packages/app/src/pages/session/message-timeline.tsx	2026-03-24 02:02:58
++++ b/packages/app/src/pages/session/message-timeline.tsx	2026-03-24 02:04:21
+@@ -239,7 +239,7 @@
+   })
+   const pending = createMemo(() =>
+     sessionMessages().findLast(
+-      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
++      (item): item is AssistantMessage => !!item && item.role === "assistant" && typeof item.time.completed !== "number",
+     ),
+   )
+   const sessionStatus = createMemo(() => {
+@@ -295,7 +295,9 @@
+     if (status.type !== "idle") {
+       const messages = sessionMessages()
+       for (let i = messages.length - 1; i >= 0; i--) {
+-        if (messages[i].role === "user") return messages[i].id
++        const msg = messages[i]
++        if (!msg) continue
++        if (msg.role === "user") return msg.id
+       }
+     }
+ 

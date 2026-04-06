@@ -1,0 +1,198 @@
+--- /Users/pingzi/.bun/install/cache/oh-my-opencode@3.11.2@@@1/dist/index.js	2026-03-10 04:59:29
++++ /Users/pingzi/.config/opencode/node_modules/oh-my-opencode/dist/index.js	2026-03-14 01:24:27
+@@ -20067,11 +20067,13 @@
+       incompleteCount: freshIncompleteCount
+     });
+     const inheritedTools = resolveInheritedPromptTools(sessionID, tools);
++    const _variant20070 = model?.variant;
+     await ctx.client.session.promptAsync({
+       path: { id: sessionID },
+       body: {
+         agent: agentName,
+-        ...model !== undefined ? { model } : {},
++        ...model !== undefined ? { model: { providerID: model.providerID, modelID: model.modelID } } : {},
++        ..._variant20070 ? { variant: _variant20070 } : {},
+         ...inheritedTools ? { tools: inheritedTools } : {},
+         parts: [createInternalAgentTextPart(prompt)]
+       },
+@@ -21845,6 +21847,7 @@
+     sessionID,
+     agent: userMessage?.info?.agent,
+     model: userMessage?.info?.model,
++    variant: userMessage?.info?.variant,
+     tools: userMessage?.info?.tools
+   };
+ }
+@@ -21857,6 +21860,7 @@
+         parts: [createInternalAgentTextPart(RECOVERY_RESUME_TEXT)],
+         agent: config.agent,
+         model: config.model,
++        ...config.variant ? { variant: config.variant } : {},
+         ...inheritedTools ? { tools: inheritedTools } : {}
+       }
+     });
+@@ -43060,6 +43064,7 @@
+ async function injectContinuationPrompt(ctx, options) {
+   let agent;
+   let model;
++  let variant;
+   let tools;
+   const sourceSessionID = options.inheritFromSessionID ?? options.sessionID;
+   try {
+@@ -43072,6 +43077,7 @@
+       if (info?.agent || info?.model || info?.modelID && info?.providerID) {
+         agent = info.agent;
+         model = info.model ?? (info.providerID && info.modelID ? { providerID: info.providerID, modelID: info.modelID } : undefined);
++        variant = info.variant;
+         tools = info.tools;
+         break;
+       }
+@@ -43084,6 +43090,7 @@
+       providerID: currentMessage.model.providerID,
+       modelID: currentMessage.model.modelID
+     } : undefined;
++    variant = currentMessage?.variant;
+     tools = currentMessage?.tools;
+   }
+   const inheritedTools = resolveInheritedPromptTools(sourceSessionID, tools);
+@@ -43092,6 +43099,7 @@
+     body: {
+       ...agent !== undefined ? { agent } : {},
+       ...model !== undefined ? { model } : {},
++      ...variant ? { variant } : {},
+       ...inheritedTools ? { tools: inheritedTools } : {},
+       parts: [createInternalAgentTextPart(options.prompt)]
+     },
+@@ -49222,10 +49230,10 @@
+       const model2 = info?.model;
+       const tools2 = normalizePromptTools(info?.tools);
+       if (model2?.providerID && model2?.modelID) {
+-        return { model: { providerID: model2.providerID, modelID: model2.modelID }, tools: tools2 };
++        return { model: { providerID: model2.providerID, modelID: model2.modelID }, variant: info?.variant, tools: tools2 };
+       }
+       if (info?.providerID && info?.modelID) {
+-        return { model: { providerID: info.providerID, modelID: info.modelID }, tools: tools2 };
++        return { model: { providerID: info.providerID, modelID: info.modelID }, variant: info?.variant, tools: tools2 };
+       }
+     }
+   } catch {}
+@@ -49239,9 +49247,9 @@
+   const model = currentMessage?.model;
+   const tools = normalizePromptTools(currentMessage?.tools);
+   if (!model?.providerID || !model?.modelID) {
+-    return { tools };
++    return { variant: currentMessage?.variant, tools };
+   }
+-  return { model: { providerID: model.providerID, modelID: model.modelID }, tools };
++  return { model: { providerID: model.providerID, modelID: model.modelID }, variant: currentMessage?.variant, tools };
+ }
+ 
+ // src/hooks/atlas/boulder-continuation-injector.ts
+@@ -49277,6 +49285,7 @@
+       body: {
+         agent: agent ?? "atlas",
+         ...promptContext.model !== undefined ? { model: promptContext.model } : {},
++        ...promptContext.variant ? { variant: promptContext.variant } : {},
+         ...inheritedTools ? { tools: inheritedTools } : {},
+         parts: [createInternalAgentTextPart(prompt)]
+       },
+@@ -50321,6 +50330,7 @@
+ async function resolveMainSessionTarget(ctx, sessionID) {
+   let agent = getSessionAgent(sessionID);
+   let model;
++  let variant;
+   let tools;
+   try {
+     const messagesResp = await ctx.client.session.messages({
+@@ -50332,6 +50342,7 @@
+       if (info?.agent || info?.model || info?.providerID && info?.modelID) {
+         agent = agent ?? info?.agent;
+         model = info?.model ?? (info?.providerID && info?.modelID ? { providerID: info.providerID, modelID: info.modelID } : undefined);
++        variant = info?.variant;
+         tools = resolveInheritedPromptTools(sessionID, info?.tools) ?? tools;
+         break;
+       }
+@@ -50339,7 +50350,7 @@
+   } catch (error48) {
+     log(`[${HOOK_NAME10}] Failed to resolve main session agent`, { sessionID, error: String(error48) });
+   }
+-  return { agent, model, tools: resolveInheritedPromptTools(sessionID, tools) };
++  return { agent, model, variant, tools: resolveInheritedPromptTools(sessionID, tools) };
+ }
+ async function getThinkingSummary(ctx, sessionID) {
+   try {
+@@ -50407,13 +50418,14 @@
+         continue;
+       const summary = task.sessionID ? await getThinkingSummary(ctx, task.sessionID) : null;
+       const reminder = buildReminder(task, summary, idleMs);
+-      const { agent, model, tools } = await resolveMainSessionTarget(ctx, mainSessionID);
++      const { agent, model, variant, tools } = await resolveMainSessionTarget(ctx, mainSessionID);
+       try {
+         await ctx.client.session.promptAsync({
+           path: { id: mainSessionID },
+           body: {
+             ...agent ? { agent } : {},
+             ...model ? { model } : {},
++            ...variant ? { variant } : {},
+             ...tools ? { tools } : {},
+             parts: [createInternalAgentTextPart(reminder)]
+           },
+@@ -72344,6 +72356,9 @@
+     actualModel = explicitCategoryModel ?? overrideModel ?? resolved.model;
+     if (actualModel) {
+       modelInfo = explicitCategoryModel || overrideModel ? { model: actualModel, type: "user-defined", source: "override" } : { model: actualModel, type: "system-default", source: "system-default" };
++      const parsedModel = parseModelString(actualModel);
++      const variantToUse = userCategories?.[args.category]?.variant ?? resolved.config.variant;
++      categoryModel = parsedModel ? variantToUse ? { ...parsedModel, variant: variantToUse } : parsedModel : undefined;
+     }
+   } else {
+     const resolution = resolveModelForDelegateTask({
+@@ -75421,14 +75436,14 @@
+ }
+ 
+ // src/features/background-agent/constants.ts
+-var TASK_TTL_MS = 30 * 60 * 1000;
++var TASK_TTL_MS = 120 * 60 * 1000;
+ var MIN_STABILITY_TIME_MS2 = 10 * 1000;
+ var DEFAULT_STALE_TIMEOUT_MS = 180000;
+ var DEFAULT_MESSAGE_STALENESS_TIMEOUT_MS = 600000;
+ var MIN_RUNTIME_BEFORE_STALE_MS = 30000;
+ var MIN_IDLE_TIME_MS = 5000;
+ var POLLING_INTERVAL_MS = 3000;
+-var TASK_CLEANUP_DELAY_MS = 10 * 60 * 1000;
++var TASK_CLEANUP_DELAY_MS = 30 * 60 * 1000;
+ 
+ // src/features/background-agent/duration-formatter.ts
+ function formatDuration3(start, end) {
+@@ -76821,6 +76836,7 @@
+     }
+     let agent = task.parentAgent;
+     let model;
++    let variant;
+     let tools = task.parentTools;
+     if (this.enableParentSessionNotifications) {
+       try {
+@@ -76835,6 +76851,7 @@
+           if (info?.agent || info?.model || info?.modelID && info?.providerID || normalizedTools) {
+             agent = info?.agent ?? task.parentAgent;
+             model = info?.model ?? (info?.providerID && info?.modelID ? { providerID: info.providerID, modelID: info.modelID } : undefined);
++            variant = info?.variant;
+             tools = normalizedTools ?? tools;
+             break;
+           }
+@@ -76850,6 +76867,7 @@
+         const currentMessage = messageDir ? findNearestMessageExcludingCompaction(messageDir) : null;
+         agent = currentMessage?.agent ?? task.parentAgent;
+         model = currentMessage?.model?.providerID && currentMessage?.model?.modelID ? { providerID: currentMessage.model.providerID, modelID: currentMessage.model.modelID } : undefined;
++        variant = currentMessage?.variant;
+         tools = normalizePromptTools(currentMessage?.tools) ?? tools;
+       }
+       const resolvedTools = resolveInheritedPromptTools(task.parentSessionID, tools);
+@@ -76865,6 +76883,7 @@
+             noReply: !allComplete,
+             ...agent !== undefined ? { agent } : {},
+             ...model !== undefined ? { model } : {},
++            ...variant ? { variant } : {},
+             ...resolvedTools ? { tools: resolvedTools } : {},
+             parts: [createInternalAgentTextPart(notification2)]
+           }

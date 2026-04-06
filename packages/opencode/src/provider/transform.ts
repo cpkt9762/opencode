@@ -318,6 +318,44 @@ export namespace ProviderTransform {
       })
     }
 
+    msgs = repairToolResults(msgs)
+    return msgs
+  }
+
+  // Ensures every tool-call in an assistant message has a matching tool-result
+  // in the immediately following message. Inserts synthetic error tool-result
+  // blocks for any orphaned tool-calls to prevent API rejections (e.g. Anthropic
+  // requires each tool_use to have a corresponding tool_result).
+  function repairToolResults(msgs: ModelMessage[]): ModelMessage[] {
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i]
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
+      const calls = msg.content.filter(
+        (p) => p.type === "tool-call" && !("providerExecuted" in p && p.providerExecuted),
+      )
+      if (!calls.length) continue
+      const next = msgs[i + 1]
+      const found = new Set<string>()
+      if (next && Array.isArray(next.content)) {
+        for (const p of next.content) {
+          if (p.type === "tool-result" && "toolCallId" in p) found.add(p.toolCallId)
+        }
+      }
+      const orphans = calls.filter((tc) => "toolCallId" in tc && !found.has(tc.toolCallId))
+      if (!orphans.length) continue
+      const repairs = orphans.map((tc) => ({
+        type: "tool-result" as const,
+        toolCallId: "toolCallId" in tc ? tc.toolCallId : "",
+        toolName: "toolName" in tc ? tc.toolName : "",
+        output: "[Tool result missing from conversation history]",
+      }))
+      if (next?.role === "tool" && Array.isArray(next.content)) {
+        ;(next as { content: any[] }).content.push(...repairs)
+      } else {
+        msgs.splice(i + 1, 0, { role: "tool", content: repairs } as ModelMessage)
+        i++
+      }
+    }
     return msgs
   }
 

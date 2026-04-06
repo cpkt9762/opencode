@@ -1,0 +1,17 @@
+--- a/dist/index.js
++++ b/dist/index.js
+# PR #2539: fix(delegate-task): build categoryModel with variant for categories without fallback chain
+# https://github.com/code-yeongyu/oh-my-openagent/pull/2539
+#
+# Bug: category-resolver drops variant for categories without CATEGORY_MODEL_REQUIREMENTS entry
+# (e.g. user-defined categories like solana-re, solana-develop)
+#
+# Search anchor: modelInfo = explicitCategoryModel || overrideModel ? { model: actualModel, type: "user-defined"
+# Insert AFTER that line, BEFORE the closing }
+@@ category-resolver.ts — !requirement branch @@
+       modelInfo = explicitCategoryModel || overrideModel ? { model: actualModel, type: "user-defined", source: "override" } : { model: actualModel, type: "system-default", source: "system-default" };
++      const parsedModel = parseModelString(actualModel);
++      const variantToUse = userCategories?.[args.category]?.variant ?? resolved.config.variant;
++      categoryModel = parsedModel ? variantToUse ? { ...parsedModel, variant: variantToUse } : parsedModel : undefined;
+     }
+   } else {

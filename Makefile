@@ -1,4 +1,4 @@
-SIGN_IDENTITY ?= OpenCode Dev
+SIGN_IDENTITY ?= -
 DESKTOP_DIR   := packages/desktop
 OPENCODE_DIR  := packages/opencode
 PROD_CONF     := src-tauri/tauri.prod.conf.json
@@ -7,6 +7,7 @@ SIDECAR_DIR   := $(DESKTOP_DIR)/src-tauri/sidecars
 APP_NAME      := OpenCode.app
 INSTALL_DIR   := /Applications
 BUN           := $(shell which bun 2>/dev/null || echo ~/.bun/bin/bun)
+export PATH   := $(dir $(BUN)):$(PATH)
 
 # Detect macOS arch for sidecar target triple
 ARCH := $(shell uname -m)
@@ -20,20 +21,33 @@ else
   BUILD_FLAGS := --baseline
 endif
 
-.PHONY: build install uninstall dev clean cli
+OMO_DIR       := 3rd-github/oh-my-openagent
+
+.PHONY: build install uninstall dev clean cli sdk omo
 
 # Build production binary (default)
 all: build
 
+# Regenerate JS SDK from OpenAPI spec
+sdk:
+	$(BUN) run --cwd packages/sdk/js script/build.ts
+
+# Build oh-my-openagent plugin
+omo:
+	$(BUN) run --cwd $(OMO_DIR) build
+
 # Build opencode CLI sidecar
-cli:
+cli: sdk
 	PATH="$(dir $(BUN)):$$PATH" OPENCODE_CHANNEL=latest $(BUN) run --cwd $(OPENCODE_DIR) build --single $(BUILD_FLAGS)
 	@mkdir -p $(SIDECAR_DIR)
 	cp $(OPENCODE_DIR)/dist/$(OC_DIST)/bin/opencode $(SIDECAR_DIR)/opencode-cli-$(RUST_TARGET)
 
 # Build production binary (rebuilds CLI sidecar first)
+# tauri build may fail at updater signing when TAURI_SIGNING_PRIVATE_KEY is unset;
+# the .app bundle is still produced, so treat that as success.
 build: cli
-	PATH="$(dir $(BUN)):$$PATH" $(BUN) run --cwd $(DESKTOP_DIR) tauri build -c $(PROD_CONF)
+	PATH="$(dir $(BUN)):$$PATH" $(BUN) run --cwd $(DESKTOP_DIR) tauri build -c $(PROD_CONF) || \
+		([ -d "$(BUNDLE_DIR)/$(APP_NAME)" ] && echo "Build ok (updater signing skipped — set TAURI_SIGNING_PRIVATE_KEY for full release)")
 
 # Sign + install to /Applications (backs up existing)
 install:
@@ -45,8 +59,9 @@ install:
 	fi
 	cp -r $(BUNDLE_DIR)/$(APP_NAME) $(INSTALL_DIR)/
 	codesign --force --deep --sign "$(SIGN_IDENTITY)" $(INSTALL_DIR)/$(APP_NAME)
-	cp $(OPENCODE_DIR)/dist/$(OC_DIST)/bin/opencode /opt/homebrew/bin/opencode
-	cp $(OPENCODE_DIR)/dist/$(OC_DIST)/bin/opencode $(HOME)/.opencode/bin/opencode
+	@mkdir -p /opt/homebrew/bin $(HOME)/.opencode/bin
+	cp $(OPENCODE_DIR)/dist/$(OC_DIST)/bin/opencode /opt/homebrew/bin/opencode.tmp && mv /opt/homebrew/bin/opencode.tmp /opt/homebrew/bin/opencode
+	cp $(OPENCODE_DIR)/dist/$(OC_DIST)/bin/opencode $(HOME)/.opencode/bin/opencode.tmp && mv $(HOME)/.opencode/bin/opencode.tmp $(HOME)/.opencode/bin/opencode
 	@echo "Installed and signed. Run 'brew pin opencode-desktop' to prevent brew overwrite."
 
 # Restore official version
