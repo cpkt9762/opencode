@@ -52,11 +52,24 @@ export namespace SessionRetry {
     return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
   }
 
-  export function retryable(error: Err) {
+  function isGptModel(modelID?: string) {
+    return typeof modelID === "string" && modelID.toLowerCase().startsWith("gpt-")
+  }
+
+  function gptFallback(error: Err, modelID?: string) {
+    if (!isGptModel(modelID)) return undefined
+    if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
+    if (MessageV2.AuthError.isInstance(error)) return undefined
+    const raw = typeof error.data?.message === "string" ? error.data.message : ""
+    return raw.length > 0 ? raw : "Retrying GPT model"
+  }
+
+  export function retryable(error: Err, opts?: { modelID?: string }) {
     // context overflow errors should not be retried
     if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
+    if (MessageV2.AuthError.isInstance(error)) return undefined
     if (MessageV2.APIError.isInstance(error)) {
-      if (!error.data.isRetryable) return undefined
+      if (!error.data.isRetryable) return gptFallback(error, opts?.modelID)
       if (error.data.responseBody?.includes("FreeUsageLimitError"))
         return `Free usage exceeded, subscribe to Go https://opencode.ai/go`
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
@@ -87,7 +100,7 @@ export namespace SessionRetry {
         return undefined
       }
     })
-    if (!json || typeof json !== "object") return undefined
+    if (!json || typeof json !== "object") return gptFallback(error, opts?.modelID)
     const code = typeof json.code === "string" ? json.code : ""
 
     if (json.type === "error" && json.error?.type === "too_many_requests") {
@@ -99,7 +112,7 @@ export namespace SessionRetry {
     if (json.type === "error" && typeof json.error?.code === "string" && json.error.code.includes("rate_limit")) {
       return "Rate Limited"
     }
-    return undefined
+    return gptFallback(error, opts?.modelID)
   }
 
   function errorSummary(error: Err) {
@@ -116,18 +129,24 @@ export namespace SessionRetry {
   export function policy(opts: {
     parse: (error: unknown) => Err
     set: (input: { attempt: number; message: string; next: number }) => Effect.Effect<void>
+    modelID?: string
   }) {
     return Schedule.fromStepWithMetadata(
       Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
         const error = opts.parse(meta.input)
         const summary = errorSummary(error)
         if (meta.attempt > RETRY_MAX_ATTEMPTS) {
-          log.error("retry limit reached", { attempt: meta.attempt, max: RETRY_MAX_ATTEMPTS, ...summary })
+          log.error("retry limit reached", {
+            attempt: meta.attempt,
+            max: RETRY_MAX_ATTEMPTS,
+            modelID: opts.modelID,
+            ...summary,
+          })
           return Cause.done(meta.attempt)
         }
-        const message = retryable(error)
+        const message = retryable(error, { modelID: opts.modelID })
         if (!message) {
-          log.warn("giving up, error not retryable", { attempt: meta.attempt, ...summary })
+          log.warn("giving up, error not retryable", { attempt: meta.attempt, modelID: opts.modelID, ...summary })
           return Cause.done(meta.attempt)
         }
         return Effect.gen(function* () {
@@ -138,6 +157,7 @@ export namespace SessionRetry {
             max: RETRY_MAX_ATTEMPTS,
             waitMs: wait,
             reason: message,
+            modelID: opts.modelID,
             ...summary,
           })
           yield* opts.set({ attempt: meta.attempt, message, next: now + wait })

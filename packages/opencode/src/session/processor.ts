@@ -467,6 +467,7 @@ export namespace SessionProcessor {
               Effect.retry(
                 SessionRetry.policy({
                   parse,
+                  modelID: ctx.model.modelID,
                   set: (info) =>
                     status.set(ctx.sessionID, {
                       type: "retry",

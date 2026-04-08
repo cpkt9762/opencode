@@ -118,6 +118,37 @@ describe("session.retry.delay", () => {
     })
   })
 
+  test("retryable treats unknown errors on gpt- models as retryable (aggressive fallback)", () => {
+    const unknown = {
+      name: "UnknownError",
+      data: {
+        message: JSON.stringify({
+          type: "error",
+          sequence_number: 2,
+          error: { type: "service_unavailable_error", code: "server_is_overloaded", message: "overloaded" },
+        }),
+      },
+    } as ReturnType<NamedError["toObject"]>
+
+    expect(SessionRetry.retryable(unknown)).toBeUndefined()
+    expect(SessionRetry.retryable(unknown, { modelID: "gpt-5.4" })).toBeDefined()
+    expect(SessionRetry.retryable(unknown, { modelID: "claude-3-5-sonnet" })).toBeUndefined()
+  })
+
+  test("retryable blocks auth and context overflow errors even on gpt- models", () => {
+    const auth = new MessageV2.AuthError({
+      providerID: ProviderID.make("openai"),
+      message: "bad key",
+    }).toObject() as ReturnType<NamedError["toObject"]>
+    const overflow = new MessageV2.ContextOverflowError({
+      message: "too long",
+      responseBody: "",
+    }).toObject() as ReturnType<NamedError["toObject"]>
+
+    expect(SessionRetry.retryable(auth, { modelID: "gpt-5.4" })).toBeUndefined()
+    expect(SessionRetry.retryable(overflow, { modelID: "gpt-5.4" })).toBeUndefined()
+  })
+
   test("policy stops retrying once RETRY_MAX_ATTEMPTS is exceeded", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
