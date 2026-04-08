@@ -32,7 +32,9 @@ export namespace ProviderError {
     const status = e.statusCode
     if (!status) return e.isRetryable
     // openai sometimes returns 404 for models that are actually available
-    return status === 404 || e.isRetryable
+    if (status === 404) return true
+    if (status >= 500) return true
+    return e.isRetryable
   }
 
   // Providers not reliably handled in this function:
@@ -169,6 +171,24 @@ export namespace ProviderError {
         responseBody?: string
         metadata?: Record<string, string>
       }
+
+  const OPENAI_TRANSIENT_STREAM_PATTERNS = [/server_error/i, /an error occurred while processing your request/i]
+
+  export function reclassifyStreamError(error: unknown, providerID: ProviderID): unknown {
+    if (!(error instanceof Error)) return error
+    if (APICallError.isInstance(error)) return error
+    if (!providerID.startsWith("openai")) return error
+    const msg = error.message
+    if (!OPENAI_TRANSIENT_STREAM_PATTERNS.some((p) => p.test(msg))) return error
+    return new APICallError({
+      message: msg,
+      url: "",
+      requestBodyValues: {},
+      statusCode: 500,
+      isRetryable: true,
+      cause: error,
+    })
+  }
 
   export function parseAPICallError(input: { providerID: ProviderID; error: APICallError }): ParsedAPICallError {
     const m = message(input.providerID, input.error)

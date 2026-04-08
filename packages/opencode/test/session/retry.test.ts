@@ -5,6 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Effect, Schedule } from "effect"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
+import { ProviderError } from "../../src/provider/error"
 import { ProviderID } from "../../src/provider/schema"
 import { SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
@@ -247,5 +248,77 @@ describe("session.message-v2.fromError", () => {
     })
     const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") }) as MessageV2.APIError
     expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("marks OpenAI 5xx status codes as retryable even when ai-sdk flags them as non-retryable", () => {
+    const error = new APICallError({
+      message: "An error occurred while processing your request",
+      url: "https://api.openai.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 500,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":{"code":"server_error","message":"boom"}}',
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("marks OpenAI 503 status codes as retryable", () => {
+    const error = new APICallError({
+      message: "Service Unavailable",
+      url: "https://api.openai.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 503,
+      responseHeaders: {},
+      responseBody: "",
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
+})
+
+describe("provider.error.reclassifyStreamError", () => {
+  test("reclassifies OpenAI mid-stream server_error text into a retryable APICallError", () => {
+    const raw = new Error(
+      "server_error: An error occurred while processing your request. You can retry your request, or contact us through our help center at help.openai.com if the error persists. Please include the request ID cb2e422f-6c66-48fb-bfc5-869eccb33537 in your message.",
+    )
+    const out = ProviderError.reclassifyStreamError(raw, ProviderID.make("openai"))
+    expect(APICallError.isInstance(out)).toBe(true)
+    const api = out as APICallError
+    expect(api.statusCode).toBeGreaterThanOrEqual(500)
+    expect(api.isRetryable).toBe(true)
+    expect(api.cause).toBe(raw)
+  })
+
+  test("reclassifies OpenAI mid-stream 'An error occurred while processing' text into a retryable APICallError", () => {
+    const raw = new Error("An error occurred while processing your request.")
+    const out = ProviderError.reclassifyStreamError(raw, ProviderID.make("openai"))
+    expect(APICallError.isInstance(out)).toBe(true)
+    expect((out as APICallError).isRetryable).toBe(true)
+  })
+
+  test("leaves unrelated OpenAI errors untouched", () => {
+    const raw = new Error("tool invocation failed")
+    const out = ProviderError.reclassifyStreamError(raw, ProviderID.make("openai"))
+    expect(out).toBe(raw)
+  })
+
+  test("does not reclassify errors for non-openai providers", () => {
+    const raw = new Error("server_error: something")
+    const out = ProviderError.reclassifyStreamError(raw, ProviderID.make("anthropic"))
+    expect(out).toBe(raw)
+  })
+
+  test("end-to-end: reclassified mid-stream error is retryable through SessionRetry", () => {
+    const raw = new Error("server_error: An error occurred while processing your request.")
+    const reclassified = ProviderError.reclassifyStreamError(raw, ProviderID.make("openai"))
+    const fromError = MessageV2.fromError(reclassified, { providerID: ProviderID.make("openai") })
+    expect(MessageV2.APIError.isInstance(fromError)).toBe(true)
+    const apiError = fromError as MessageV2.APIError
+    expect(apiError.data.isRetryable).toBe(true)
+    const retryable = SessionRetry.retryable(apiError)
+    expect(retryable).toBeDefined()
   })
 })

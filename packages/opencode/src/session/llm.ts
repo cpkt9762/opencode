@@ -6,6 +6,7 @@ import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
+import { ProviderError } from "@/provider/error"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -63,9 +64,16 @@ export namespace LLM {
                 )
 
                 const result = yield* Effect.promise(() => LLM.stream({ ...input, abort: ctrl.signal }))
+                const pid = input.model.providerID
 
                 return Stream.fromAsyncIterable(result.fullStream, (e) =>
                   e instanceof Error ? e : new Error(String(e)),
+                ).pipe(
+                  Stream.map((event) =>
+                    event.type === "error"
+                      ? { ...event, error: ProviderError.reclassifyStreamError(event.error, pid) }
+                      : event,
+                  ),
                 )
               }),
             ),
