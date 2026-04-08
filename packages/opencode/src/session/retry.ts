@@ -3,6 +3,7 @@ import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
+import { retryLog } from "./retry-log"
 
 export namespace SessionRetry {
   const log = Log.create({ service: "session.retry" })
@@ -136,30 +137,31 @@ export namespace SessionRetry {
         const error = opts.parse(meta.input)
         const summary = errorSummary(error)
         if (meta.attempt > RETRY_MAX_ATTEMPTS) {
-          log.error("retry limit reached", {
-            attempt: meta.attempt,
-            max: RETRY_MAX_ATTEMPTS,
-            modelID: opts.modelID,
-            ...summary,
-          })
+          const info = { attempt: meta.attempt, max: RETRY_MAX_ATTEMPTS, modelID: opts.modelID, ...summary }
+          log.error("retry limit reached", info)
+          retryLog("ERROR", "retry limit reached", info)
           return Cause.done(meta.attempt)
         }
         const message = retryable(error, { modelID: opts.modelID })
         if (!message) {
-          log.warn("giving up, error not retryable", { attempt: meta.attempt, modelID: opts.modelID, ...summary })
+          const info = { attempt: meta.attempt, modelID: opts.modelID, ...summary }
+          log.warn("giving up, error not retryable", info)
+          retryLog("WARN", "giving up, error not retryable", info)
           return Cause.done(meta.attempt)
         }
         return Effect.gen(function* () {
           const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
           const now = yield* Clock.currentTimeMillis
-          log.warn("retrying", {
+          const info = {
             attempt: meta.attempt,
             max: RETRY_MAX_ATTEMPTS,
             waitMs: wait,
             reason: message,
             modelID: opts.modelID,
             ...summary,
-          })
+          }
+          log.warn("retrying", info)
+          retryLog("WARN", "retrying", info)
           yield* opts.set({ attempt: meta.attempt, message, next: now + wait })
           return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]
         })
