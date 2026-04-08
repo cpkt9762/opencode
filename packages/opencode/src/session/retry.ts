@@ -127,6 +127,14 @@ export namespace SessionRetry {
     }
   }
 
+  function friendlyMessage(reason: string, attempt: number) {
+    const looksLikeJson = reason.trimStart().startsWith("{") || reason.trimStart().startsWith("[")
+    if (looksLikeJson || reason.length > 80) {
+      return `Retrying (attempt ${attempt}/${RETRY_MAX_ATTEMPTS})`
+    }
+    return `${reason} (attempt ${attempt}/${RETRY_MAX_ATTEMPTS})`
+  }
+
   export function policy(opts: {
     parse: (error: unknown) => Err
     set: (input: { attempt: number; message: string; next: number }) => Effect.Effect<void>
@@ -162,7 +170,7 @@ export namespace SessionRetry {
           }
           log.warn("retrying", info)
           retryLog("WARN", "retrying", info)
-          yield* opts.set({ attempt: meta.attempt, message, next: now + wait })
+          yield* opts.set({ attempt: meta.attempt, message: friendlyMessage(message, meta.attempt), next: now + wait })
           return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]
         })
       }),

@@ -112,7 +112,7 @@ describe("session.retry.delay", () => {
         expect(await SessionStatus.get(sessionID)).toMatchObject({
           type: "retry",
           attempt: 2,
-          message: "boom",
+          message: "boom (attempt 2/10)",
         })
       },
     })
