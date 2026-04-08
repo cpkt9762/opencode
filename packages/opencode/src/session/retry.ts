@@ -2,14 +2,18 @@ import type { NamedError } from "@opencode-ai/util/error"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
+import { Log } from "@/util/log"
 
 export namespace SessionRetry {
+  const log = Log.create({ service: "session.retry" })
+
   export type Err = ReturnType<NamedError["toObject"]>
 
   export const RETRY_INITIAL_DELAY = 2000
   export const RETRY_BACKOFF_FACTOR = 2
   export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
   export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+  export const RETRY_MAX_ATTEMPTS = 10
 
   function cap(ms: number) {
     return Math.min(ms, RETRY_MAX_DELAY)
@@ -98,6 +102,17 @@ export namespace SessionRetry {
     return undefined
   }
 
+  function errorSummary(error: Err) {
+    const raw = typeof error.data?.message === "string" ? error.data.message : ""
+    const snippet = raw.length > 200 ? raw.slice(0, 200) + "..." : raw
+    const statusCode = MessageV2.APIError.isInstance(error) ? error.data.statusCode : undefined
+    return {
+      name: error.name,
+      statusCode,
+      message: snippet,
+    }
+  }
+
   export function policy(opts: {
     parse: (error: unknown) => Err
     set: (input: { attempt: number; message: string; next: number }) => Effect.Effect<void>
@@ -105,11 +120,26 @@ export namespace SessionRetry {
     return Schedule.fromStepWithMetadata(
       Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
         const error = opts.parse(meta.input)
+        const summary = errorSummary(error)
+        if (meta.attempt > RETRY_MAX_ATTEMPTS) {
+          log.error("retry limit reached", { attempt: meta.attempt, max: RETRY_MAX_ATTEMPTS, ...summary })
+          return Cause.done(meta.attempt)
+        }
         const message = retryable(error)
-        if (!message) return Cause.done(meta.attempt)
+        if (!message) {
+          log.warn("giving up, error not retryable", { attempt: meta.attempt, ...summary })
+          return Cause.done(meta.attempt)
+        }
         return Effect.gen(function* () {
           const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
           const now = yield* Clock.currentTimeMillis
+          log.warn("retrying", {
+            attempt: meta.attempt,
+            max: RETRY_MAX_ATTEMPTS,
+            waitMs: wait,
+            reason: message,
+            ...summary,
+          })
           yield* opts.set({ attempt: meta.attempt, message, next: now + wait })
           return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]
         })

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { NamedError } from "@opencode-ai/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Schedule } from "effect"
+import { Effect, Exit, Schedule } from "effect"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderError } from "../../src/provider/error"
@@ -114,6 +114,46 @@ describe("session.retry.delay", () => {
           attempt: 2,
           message: "boom",
         })
+      },
+    })
+  })
+
+  test("policy stops retrying once RETRY_MAX_ATTEMPTS is exceeded", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const sessionID = SessionID.make("session-retry-cap")
+        const error = apiError({ "retry-after-ms": "0" })
+
+        const outcomes = await Effect.runPromise(
+          Effect.gen(function* () {
+            const step = yield* Schedule.toStepWithMetadata(
+              SessionRetry.policy({
+                parse: (err) => err as MessageV2.APIError,
+                set: (info) =>
+                  Effect.promise(() =>
+                    SessionStatus.set(sessionID, {
+                      type: "retry",
+                      attempt: info.attempt,
+                      message: info.message,
+                      next: info.next,
+                    }),
+                  ),
+              }),
+            )
+            const collected: Array<"continue" | "done"> = []
+            for (let i = 0; i < SessionRetry.RETRY_MAX_ATTEMPTS + 2; i++) {
+              const exit = yield* Effect.exit(step(error))
+              collected.push(Exit.isSuccess(exit) ? "continue" : "done")
+            }
+            return collected
+          }),
+        )
+
+        expect(outcomes.filter((o) => o === "continue").length).toBe(SessionRetry.RETRY_MAX_ATTEMPTS)
+        expect(outcomes.filter((o) => o === "done").length).toBeGreaterThanOrEqual(1)
+        expect(outcomes[outcomes.length - 1]).toBe("done")
       },
     })
   })
