@@ -126,6 +126,25 @@ export namespace ACP {
       })
   }
 
+  function taskSessionId(part: ToolPart): string | undefined {
+    if (part.tool !== "task") return undefined
+    const md = "metadata" in part.state ? part.state.metadata : null
+    if (!md || typeof md !== "object") return undefined
+    const id = (md as Record<string, unknown>)["sessionId"]
+    return typeof id === "string" ? id : undefined
+  }
+
+  function taskMeta(part: ToolPart) {
+    const id = taskSessionId(part)
+    if (!id) return undefined
+    return {
+      subagent_session_info: {
+        session_id: id,
+        message_start_index: 0,
+      },
+    }
+  }
+
   export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
     return {
       create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
@@ -330,6 +349,7 @@ export namespace ACP {
                       locations: toLocations(part.tool, part.state.input),
                       rawInput: part.state.input,
                       ...(content.length > 0 && { content }),
+                      _meta: taskMeta(part),
                     },
                   })
                   .catch((error) => {
@@ -411,11 +431,13 @@ export namespace ACP {
                         output: part.state.output,
                         metadata: part.state.metadata,
                       },
+                      _meta: taskMeta(part),
                     },
                   })
                   .catch((error) => {
                     log.error("failed to send tool completed to ACP", { error })
                   })
+
                 return
               }
               case "error":
@@ -867,6 +889,7 @@ export namespace ACP {
                     locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
                     ...(runningContent.length > 0 && { content: runningContent }),
+                    _meta: taskMeta(part),
                   },
                 })
                 .catch((err) => {
@@ -947,11 +970,13 @@ export namespace ACP {
                       output: part.state.output,
                       metadata: part.state.metadata,
                     },
+                    _meta: taskMeta(part),
                   },
                 })
                 .catch((err) => {
                   log.error("failed to send tool completed to ACP", { error: err })
                 })
+
               break
             case "error":
               this.toolStarts.delete(part.callID)

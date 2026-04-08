@@ -7,6 +7,7 @@ type SessionStore = {
 }
 
 export const workspaceKey = (directory: string) => {
+  if (!directory) return ""
   const value = directory.replaceAll("\\", "/")
   const drive = value.match(/^([A-Za-z]:)\/+$/)
   if (drive) return `${drive[1]}/`
