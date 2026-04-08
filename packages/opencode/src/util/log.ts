@@ -60,13 +60,20 @@ export namespace Log {
   export async function init(options: Options) {
     if (options.level) level = options.level
     cleanup(Global.Path.log)
-    if (options.print) return
     logpath = path.join(
       Global.Path.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
     await fs.truncate(logpath).catch(() => {})
     const stream = createWriteStream(logpath, { flags: "a" })
+    if (options.print) {
+      write = (msg: any) => {
+        process.stderr.write(msg)
+        stream.write(msg, () => {})
+        return msg.length
+      }
+      return
+    }
     write = async (msg: any) => {
       return new Promise((resolve, reject) => {
         stream.write(msg, (err) => {
