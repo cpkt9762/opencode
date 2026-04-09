@@ -71,18 +71,29 @@ export namespace Provider {
     if (!res.body) return res
     if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
-    const reader = res.body.getReader()
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = res.body.getReader()
+
+    const release = () => {
+      reader?.releaseLock()
+      reader = null
+    }
+
     const body = new ReadableStream<Uint8Array>({
       async pull(ctrl) {
-        const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
+        if (!reader) {
+          ctrl.close()
+          return
+        }
+        const r = reader
+        const part = await new Promise<Awaited<ReturnType<typeof r.read>>>((resolve, reject) => {
           const id = setTimeout(() => {
             const err = new Error("SSE read timed out")
             ctl.abort(err)
-            void reader.cancel(err)
+            void r.cancel(err).finally(release)
             reject(err)
           }, ms)
 
-          reader.read().then(
+          r.read().then(
             (part) => {
               clearTimeout(id)
               resolve(part)
@@ -95,6 +106,7 @@ export namespace Provider {
         })
 
         if (part.done) {
+          release()
           ctrl.close()
           return
         }
@@ -103,7 +115,10 @@ export namespace Provider {
       },
       async cancel(reason) {
         ctl.abort(reason)
-        await reader.cancel(reason)
+        if (reader) {
+          await reader.cancel(reason).catch(() => {})
+          release()
+        }
       },
     })
 
