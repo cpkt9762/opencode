@@ -86,9 +86,10 @@ export namespace LLM {
   export const defaultLayer = layer
 
   export async function stream(input: StreamRequest) {
+    const pid = input.model.providerID
     const l = log
       .clone()
-      .tag("providerID", input.model.providerID)
+      .tag("providerID", pid)
       .tag("modelID", input.model.id)
       .tag("sessionID", input.sessionID)
       .tag("small", (input.small ?? false).toString())
@@ -96,13 +97,13 @@ export namespace LLM {
       .tag("mode", input.agent.mode)
     l.info("stream", {
       modelID: input.model.id,
-      providerID: input.model.providerID,
+      providerID: pid,
     })
     const [language, cfg, provider, auth] = await Promise.all([
       Provider.getLanguage(input.model),
       Config.get(),
-      Provider.getProvider(input.model.providerID),
-      Auth.get(input.model.providerID),
+      Provider.getProvider(pid),
+      Auth.get(pid),
     ])
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
@@ -263,6 +264,19 @@ export namespace LLM {
       }
     }
 
+    const { middleware: mw } = await Plugin.trigger(
+      "llm.middleware",
+      {
+        model: {
+          id: input.model.id,
+          name: input.model.name,
+          providerID: pid,
+        },
+        providerID: pid,
+      },
+      { middleware: [] },
+    )
+
     return streamText({
       onError(error) {
         l.error("stream error", {
@@ -330,6 +344,7 @@ export namespace LLM {
               return args.params
             },
           },
+          ...mw,
         ],
       }),
       experimental_telemetry: {
