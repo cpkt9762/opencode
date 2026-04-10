@@ -253,23 +253,21 @@ When constructing the summary, try to stick to this template:
           sessionID: input.sessionID,
           model,
         })
-        const result = yield* processor
-          .process({
-            user: userMessage,
-            agent,
-            sessionID: input.sessionID,
-            tools: {},
-            system: [],
-            messages: [
-              ...modelMessages,
-              {
-                role: "user",
-                content: [{ type: "text", text: prompt }],
-              },
-            ],
-            model,
-          })
-          .pipe(Effect.onInterrupt(() => processor.abort()))
+        const result = yield* processor.process({
+          user: userMessage,
+          agent,
+          sessionID: input.sessionID,
+          tools: {},
+          system: [],
+          messages: [
+            ...modelMessages,
+            {
+              role: "user",
+              content: [{ type: "text", text: prompt }],
+            },
+          ],
+          model,
+        })
 
         if (result === "compact") {
           processor.message.error = new MessageV2.ContextOverflowError({
@@ -402,17 +400,6 @@ When constructing the summary, try to stick to this template:
   export async function prune(input: { sessionID: SessionID }) {
     return runPromise((svc) => svc.prune(input))
   }
-
-  export const process = fn(
-    z.object({
-      parentID: MessageID.zod,
-      messages: z.custom<MessageV2.WithParts[]>(),
-      sessionID: SessionID.zod,
-      auto: z.boolean(),
-      overflow: z.boolean().optional(),
-    }),
-    (input) => runPromise((svc) => svc.process(input)),
-  )
 
   export const create = fn(
     z.object({
