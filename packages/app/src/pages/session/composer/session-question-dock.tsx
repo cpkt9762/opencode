@@ -42,7 +42,6 @@ function Option(props: {
       data-slot="question-option"
       data-picked={props.picked}
       role={props.multi ? "checkbox" : "radio"}
-      aria-checked={props.picked}
       disabled={props.disabled}
       onFocus={props.onFocus}
       onClick={props.onClick}
@@ -231,11 +230,15 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
 
   const reply = async (answers: QuestionAnswer[]) => {
+    console.log("[DEBUG] reply() called with answers:", answers)
+    console.log("[DEBUG] reply() stack:", new Error().stack)
     if (sending()) return
     await replyMutation.mutateAsync(answers)
   }
 
   const reject = async () => {
+    console.log("[DEBUG] reject() called")
+    console.log("[DEBUG] reject() stack:", new Error().stack)
     if (sending()) return
     await rejectMutation.mutateAsync()
   }
@@ -484,7 +487,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               disabled={sending()}
               ref={(el) => (optsRef[i()] = el)}
               onFocus={() => setStore("focus", i())}
-              onClick={() => selectOption(i())}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                selectOption(i())
+              }}
             />
           )}
         </For>
@@ -499,7 +506,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               data-custom="true"
               data-picked={on()}
               role={multi() ? "checkbox" : "radio"}
-              aria-checked={on()}
               disabled={sending()}
               onFocus={() => setStore("focus", options().length)}
               onClick={customOpen}
@@ -517,7 +523,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             data-custom="true"
             data-picked={on()}
             role={multi() ? "checkbox" : "radio"}
-            aria-checked={on()}
             onMouseDown={(e) => {
               if (sending()) {
                 e.preventDefault()
