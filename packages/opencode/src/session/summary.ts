@@ -4,66 +4,10 @@ import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage"
 import * as Session from "./session"
-import { MessageV2 } from "./message-v2"
+import type { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
 
 export namespace SessionSummary {
-  function unquoteGitPath(input: string) {
-    if (!input.startsWith('"')) return input
-    if (!input.endsWith('"')) return input
-    const body = input.slice(1, -1)
-    const bytes: number[] = []
-
-    for (let i = 0; i < body.length; i++) {
-      const char = body[i]!
-      if (char !== "\\") {
-        bytes.push(char.charCodeAt(0))
-        continue
-      }
-
-      const next = body[i + 1]
-      if (!next) {
-        bytes.push("\\".charCodeAt(0))
-        continue
-      }
-
-      if (next >= "0" && next <= "7") {
-        const chunk = body.slice(i + 1, i + 4)
-        const match = chunk.match(/^[0-7]{1,3}/)
-        if (!match) {
-          bytes.push(next.charCodeAt(0))
-          i++
-          continue
-        }
-        bytes.push(parseInt(match[0], 8))
-        i += match[0].length
-        continue
-      }
-
-      const escaped =
-        next === "n"
-          ? "\n"
-          : next === "r"
-            ? "\r"
-            : next === "t"
-              ? "\t"
-              : next === "b"
-                ? "\b"
-                : next === "f"
-                  ? "\f"
-                  : next === "v"
-                    ? "\v"
-                    : next === "\\" || next === '"'
-                      ? next
-                      : undefined
-
-      bytes.push((escaped ?? next).charCodeAt(0))
-      i++
-    }
-
-    return Buffer.from(bytes).toString()
-  }
-
   export interface Interface {
     readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
     readonly diff: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Snapshot.FileDiff[]>
@@ -75,10 +19,7 @@ export namespace SessionSummary {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const sessions = yield* Session.Service
       const snapshot = yield* Snapshot.Service
-      const storage = yield* Storage.Service
-      const bus = yield* Bus.Service
 
       const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: {
         messages: MessageV2.WithParts[]
@@ -102,47 +43,20 @@ export namespace SessionSummary {
         return []
       })
 
-      const summarize = Effect.fn("SessionSummary.summarize")(function* (input: {
+      // TODO: session diff disabled — investigating desktop perf
+      const summarize = Effect.fn("SessionSummary.summarize")(function* (_input: {
         sessionID: SessionID
         messageID: MessageID
       }) {
-        const all = yield* sessions.messages({ sessionID: input.sessionID })
-        if (!all.length) return
-
-        const diffs = yield* computeDiff({ messages: all })
-        yield* sessions.setSummary({
-          sessionID: input.sessionID,
-          summary: {
-            additions: diffs.reduce((sum, x) => sum + x.additions, 0),
-            deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
-            files: diffs.length,
-          },
-        })
-        yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
-        yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
-
-        const messages = all.filter(
-          (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
-        )
-        const target = messages.find((m) => m.info.id === input.messageID)
-        if (!target || target.info.role !== "user") return
-        const msgDiffs = yield* computeDiff({ messages })
-        target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-        yield* sessions.updateMessage(target.info)
+        yield* Effect.void
       })
 
-      const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
-        const diffs = yield* storage
-          .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
-          .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
-        const next = diffs.map((item) => {
-          const file = unquoteGitPath(item.file)
-          if (file === item.file) return item
-          return { ...item, file }
-        })
-        const changed = next.some((item, i) => item.file !== diffs[i]?.file)
-        if (changed) yield* storage.write(["session_diff", input.sessionID], next).pipe(Effect.ignore)
-        return next
+      const diff = Effect.fn("SessionSummary.diff")(function* (_input: {
+        sessionID: SessionID
+        messageID?: MessageID
+      }) {
+        yield* Effect.void
+        return [] as Snapshot.FileDiff[]
       })
 
       return Service.of({ summarize, diff, computeDiff })
