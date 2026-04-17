@@ -29,3 +29,12 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Personal workspace (never stash/commit)
+/Makefile
+/3rd-github/
+/docs/
+/my-patch/
+/plugins/
+/output/
+/specs/

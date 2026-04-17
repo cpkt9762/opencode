@@ -16,6 +16,7 @@ export namespace Flag {
 
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
   export const OPENCODE_AUTO_HEAP_SNAPSHOT = truthy("OPENCODE_AUTO_HEAP_SNAPSHOT")
+  export const OPENCODE_AUTO_CPU_PROFILE = truthy("OPENCODE_AUTO_CPU_PROFILE")
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
   export declare const OPENCODE_PURE: boolean
