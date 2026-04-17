@@ -321,12 +321,11 @@ export const SortableWorkspace = (props: {
   })
   const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
   const boot = createMemo(() => open() || active())
-  const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
   const count = createMemo(() => sessions()?.length ?? 0)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
+  const query = useQuery(() => ({ ...loadSessionsQuery(project().worktree) }))
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
-  const wasBusy = createMemo((prev) => prev || busy(), false)
-  const loading = createMemo(() => open() && !booted() && count() === 0 && !wasBusy())
+  const loading = () => query.isLoading
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || count() === 0 || (active() && !params.id)))
   const loadMore = async () => {
@@ -431,7 +430,7 @@ export const SortableWorkspace = (props: {
             mobile={props.mobile}
             ctx={props.ctx}
             showNew={showNew}
-            loading={loading}
+            loading={() => query.isLoading && count() === 0}
             sessions={sessions}
             hasMore={hasMore}
             loadMore={loadMore}
@@ -459,11 +458,10 @@ export const LocalWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(project().worktree))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
-  const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const count = createMemo(() => sessions()?.length ?? 0)
   const query = useQuery(() => ({ ...loadSessionsQuery(project().worktree) }))
-  const loading = createMemo(() => query.isPending && count() === 0)
   const hasMore = createMemo(() => workspace().store.sessionTotal > count())
+  const loading = () => query.isLoading && count() === 0
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(project().worktree)
@@ -479,7 +477,7 @@ export const LocalWorkspace = (props: {
         mobile={props.mobile}
         ctx={props.ctx}
         showNew={() => false}
-        loading={() => query.isLoading}
+        loading={loading}
         sessions={sessions}
         hasMore={hasMore}
         loadMore={loadMore}
