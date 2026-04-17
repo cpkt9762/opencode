@@ -1,5 +1,5 @@
 import { getFilename } from "@opencode-ai/shared/util/path"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 
 type SessionStore = {
   session?: Session[]
@@ -7,6 +7,7 @@ type SessionStore = {
 }
 
 export const workspaceKey = (directory: string) => {
+  if (!directory) return ""
   const value = directory.replaceAll("\\", "/")
   const drive = value.match(/^([A-Za-z]:)\/+$/)
   if (drive) return `${drive[1]}/`

@@ -150,6 +150,21 @@ export default function Layout(props: ParentProps) {
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => route().dir)
 
+  createEffect(() => {
+    const dir = currentDir()
+    if (!dir) return
+    layout.projects.open(dir)
+  })
+
+  createEffect(() => {
+    const id = params.id
+    const dir = currentDir()
+    spaLog(`route changed: session=${id ?? "none"} dir=${dir}`)
+    try {
+      window.parent?.postMessage?.({ type: "opencode-web.session-changed", sessionId: id ?? null, directory: dir }, "*")
+    } catch {}
+  })
+
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
     busyWorkspaces: {} as Record<string, boolean>,
@@ -315,6 +330,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const navigateWithSidebarReset = (href: string) => {
+    spaLog(`navigate → ${href}`)
     clearSidebarHoverState()
     navigate(href)
     layout.mobileSidebar.hide()
@@ -577,21 +593,44 @@ export default function Layout(props: ParentProps) {
 
     return projects.find((p) => p.worktree === root)
   })
-  
+
+  const spaLog = (msg: string) => {
+    try {
+      window.parent?.postMessage?.({ type: "opencode-web.spa-log", msg }, "*")
+    } catch {}
+  }
+
   const [autoselecting] = createResource(async () => {
     await ready.promise
     await layout.ready.promise
-    if (!untrack(() => state.autoselect)) return
+    if (!untrack(() => state.autoselect)) {
+      spaLog("autoselect=false, skipping")
+      const dir = untrack(() => currentDir())
+      const hasSession = !!untrack(() => params.id)
+      if (dir && !hasSession) {
+        const root = projectRoot(dir)
+        const lps = store.lastProjectSession[root]
+        spaLog(`dir-only route: root=${root} lastProjectSession=${lps ? lps.id : "none"}`)
+        if (lps?.id) {
+          spaLog(`auto-navigating to last session: ${lps.id}`)
+          await openProject(dir, true)
+        }
+      }
+      return
+    }
 
     const list = layout.projects.list()
     const last = server.projects.last()
+    spaLog(`autoselect: projects=${list.length} last=${last ?? "none"}`)
 
     if (list.length === 0) {
       if (!last) return
+      spaLog(`autoselect: no projects, opening last=${last}`)
       await openProject(last, true)
     } else {
       const next = list.find((project) => project.worktree === last) ?? list[0]
       if (!next) return
+      spaLog(`autoselect: opening project=${next.worktree}`)
       await openProject(next.worktree, true)
     }
   })
@@ -1275,6 +1314,7 @@ export default function Layout(props: ParentProps) {
   }
 
   async function navigateToProject(directory: string | undefined) {
+    spaLog(`navigateToProject dir=${directory}`)
     if (!directory) return
     const root = projectRoot(directory)
     server.projects.touch(root)
@@ -1300,6 +1340,7 @@ export default function Layout(props: ParentProps) {
       const [data] = globalSync.child(target.directory, { bootstrap: false })
       if (data.session.some((item) => item.id === target.id)) {
         setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
+        spaLog(`openSession found id=${target.id}`)
         navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
         return true
       }
@@ -1310,15 +1351,18 @@ export default function Layout(props: ParentProps) {
       if (!resolved?.directory) return false
       if (!canOpen(resolved.directory)) return false
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
+      spaLog(`openSession resolved id=${resolved.id}`)
       navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
       return true
     }
 
     const projectSession = store.lastProjectSession[root]
+    spaLog(`lastProjectSession=${projectSession ? projectSession.id : "none"}`)
     if (projectSession?.id) {
       await refreshDirs(projectSession.directory)
       const opened = await openSession(projectSession)
       if (opened) return
+      spaLog("lastProjectSession not found, cleared")
       clearLastProjectSession(root)
     }
 
@@ -1326,6 +1370,7 @@ export default function Layout(props: ParentProps) {
       dirs.map((item) => globalSync.child(item, { bootstrap: false })[0]),
       Date.now(),
     )
+    spaLog(`latestRootSession=${latest ? latest.id : "none"}`)
     if (latest && (await openSession(latest))) {
       return
     }
@@ -1342,15 +1387,18 @@ export default function Layout(props: ParentProps) {
       ),
       Date.now(),
     )
+    spaLog(`fetchedLatest=${fetched ? fetched.id : "none"}`)
     if (fetched && (await openSession(fetched))) {
       return
     }
 
+    spaLog("no session found, navigating to empty")
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
+    spaLog(`navigateToSession id=${session.id} title=${session.title}`)
     navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
