@@ -269,7 +269,12 @@ export async function bootstrapDirectory(input: {
             if (next) input.vcsCache.setStore("value", next)
           }),
         ),
-      () => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? []))),
+      () =>
+        retry(() =>
+          input.sdk.command.list().then((x) => {
+            input.setStore("command", Array.isArray(x.data) ? x.data : [])
+          }),
+        ),
       () =>
         retry(() =>
           input.sdk.permission.list().then((x) => {
