@@ -110,6 +110,32 @@ const getDefaultUrl = () => {
   return getCurrentUrl()
 }
 
+const readClipboardImage: NonNullable<Platform["readClipboardImage"]> = () => {
+  if (window.parent === window) return Promise.resolve(null)
+  const id = crypto.randomUUID()
+  return new Promise<File | null>((resolve) => {
+    const timeout = setTimeout(() => {
+      window.removeEventListener("message", handler)
+      resolve(null)
+    }, 5000)
+    const handler = (e: MessageEvent) => {
+      if (e.source !== window.parent) return
+      if (!e.data || e.data.type !== "opencode-web.clipboard-image" || e.data.id !== id) return
+      clearTimeout(timeout)
+      window.removeEventListener("message", handler)
+      if (typeof e.data.data !== "string") return resolve(null)
+      try {
+        const bytes = Uint8Array.from(atob(e.data.data), (c) => c.charCodeAt(0))
+        resolve(new File([bytes], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+      } catch {
+        resolve(null)
+      }
+    }
+    window.addEventListener("message", handler)
+    window.parent.postMessage({ type: "opencode-web.clipboard-image-read", id }, "*")
+  })
+}
+
 const platform: Platform = {
   platform: "web",
   version: pkg.version,
@@ -118,6 +144,7 @@ const platform: Platform = {
   forward,
   restart,
   notify,
+  readClipboardImage,
   getDefaultServer: async () => {
     const stored = readDefaultServerUrl()
     return stored ? ServerConnection.Key.make(stored) : null
