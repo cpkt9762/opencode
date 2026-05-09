@@ -1,16 +1,16 @@
-import z from "zod"
-import { Effect, Option, Scope } from "effect"
-import { createReadStream } from "fs"
-import * as path from "path"
-import { createInterface } from "readline"
-import * as Tool from "./tool"
+import { createReadStream } from "node:fs"
+import * as path from "node:path"
+import { createInterface } from "node:readline"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { LSP } from "../lsp"
-import DESCRIPTION from "./read.txt"
-import { Instance } from "../project/instance"
-import { assertExternalDirectoryEffect } from "./external-directory"
-import { Instruction } from "../session/instruction"
+import { Effect, Option, Scope } from "effect"
+import z from "zod"
 import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { LSP } from "../lsp"
+import { Instance } from "../project/instance"
+import { Instruction } from "../session/instruction"
+import { assertExternalDirectoryEffect } from "./external-directory"
+import DESCRIPTION from "./read.txt"
+import * as Tool from "./tool"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -63,11 +63,11 @@ export const ReadTool = Tool.define(
       return yield* Effect.forEach(
         items,
         Effect.fnUntraced(function* (item) {
-          if (item.type === "directory") return item.name + "/"
+          if (item.type === "directory") return `${item.name}/`
           if (item.type !== "symlink") return item.name
 
           const target = yield* fs.stat(path.join(filepath, item.name)).pipe(Effect.catch(() => Effect.void))
-          if (target?.type === "Directory") return item.name + "/"
+          if (target?.type === "Directory") return `${item.name}/`
           return item.name
         }),
         { concurrency: "unbounded" },
@@ -162,7 +162,7 @@ export const ReadTool = Tool.define(
       )
 
       yield* assertExternalDirectoryEffect(ctx, filepath, {
-        bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
+        bypass: Boolean(ctx.extra?.bypassCwdCheck),
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 
@@ -203,6 +203,39 @@ export const ReadTool = Tool.define(
         }
       }
 
+      if (process.env.OPENCODE_DIFF_BRIDGE_URL) {
+        const bridgeResult = yield* Effect.promise(async () => {
+          const { bridgeGet } = await import("./diff-bridge-client")
+          try {
+            const result = (await bridgeGet(`/read-buffer?path=${encodeURIComponent(filepath)}`)) as {
+              dirty: boolean
+              content?: string
+            }
+            if (result.dirty && result.content !== undefined) {
+              const lines = result.content.split("\n")
+              const offset = params.offset ?? 1
+              const limit = params.limit ?? 2000
+              const sliced = lines.slice(offset - 1, offset - 1 + limit)
+              let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
+              output += sliced.map((line, i) => `${i + offset}: ${line}`).join("\n")
+              output += `\n\n(End of file - total ${lines.length} lines)\n</content>`
+              return {
+                title: filepath,
+                output,
+                metadata: {
+                  preview: sliced.slice(0, 20).join("\n"),
+                  truncated: false,
+                  loaded: [],
+                },
+              }
+            }
+          } catch (error) {
+            console.error("[diff-bridge] read fallthrough:", error)
+          }
+        })
+        if (bridgeResult) return bridgeResult
+      }
+
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
       const sample = yield* readSample(filepath, Number(stat.size), SAMPLE_BYTES)
 
@@ -233,7 +266,10 @@ export const ReadTool = Tool.define(
       }
 
       const file = yield* Effect.promise(() =>
-        lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset ?? 1 }),
+        lines(filepath, {
+          limit: params.limit ?? DEFAULT_READ_LIMIT,
+          offset: params.offset ?? 1,
+        }),
       )
       if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
         return yield* Effect.fail(

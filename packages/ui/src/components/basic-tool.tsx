@@ -199,6 +199,7 @@ export function BasicTool(props: BasicToolProps) {
     <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
       <Show
         when={props.triggerHref}
+        keyed
         fallback={
           <Collapsible.Trigger
             data-hide-details={props.hideDetails ? "true" : undefined}
@@ -211,7 +212,7 @@ export function BasicTool(props: BasicToolProps) {
         {(href) => (
           <Collapsible.Trigger
             as="a"
-            href={href()}
+            href={href}
             data-hide-details={props.hideDetails ? "true" : undefined}
             onClick={props.onTriggerClick}
           >

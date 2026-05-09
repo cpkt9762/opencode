@@ -1,19 +1,19 @@
-import z from "zod"
-import * as path from "path"
-import { Effect } from "effect"
-import * as Tool from "./tool"
-import { Bus } from "../bus"
-import { FileWatcher } from "../file/watcher"
-import { Instance } from "../project/instance"
-import { Patch } from "../patch"
-import { createTwoFilesPatch, diffLines } from "diff"
-import { assertExternalDirectoryEffect } from "./external-directory"
-import { trimDiff } from "./edit"
-import { LSP } from "../lsp"
+import * as path from "node:path"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import DESCRIPTION from "./apply_patch.txt"
+import { createTwoFilesPatch, diffLines } from "diff"
+import { Effect } from "effect"
+import z from "zod"
+import { Bus } from "../bus"
 import { File } from "../file"
+import { FileWatcher } from "../file/watcher"
 import { Format } from "../format"
+import { LSP } from "../lsp"
+import { Patch } from "../patch"
+import { Instance } from "../project/instance"
+import DESCRIPTION from "./apply_patch.txt"
+import { trimDiff } from "./edit"
+import { assertExternalDirectoryEffect } from "./external-directory"
+import * as Tool from "./tool"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -91,7 +91,7 @@ export const ApplyPatchTool = Tool.define(
               deletions,
             })
 
-            totalDiff += diff + "\n"
+            totalDiff += `${diff}\n`
             break
           }
 
@@ -138,7 +138,7 @@ export const ApplyPatchTool = Tool.define(
               deletions,
             })
 
-            totalDiff += diff + "\n"
+            totalDiff += `${diff}\n`
             break
           }
 
@@ -168,7 +168,7 @@ export const ApplyPatchTool = Tool.define(
               deletions,
             })
 
-            totalDiff += deleteDiff + "\n"
+            totalDiff += `${deleteDiff}\n`
             break
           }
         }
@@ -198,6 +198,34 @@ export const ApplyPatchTool = Tool.define(
         },
       })
 
+      if (process.env.OPENCODE_DIFF_BRIDGE_URL) {
+        const bridgeResult = yield* Effect.promise(async () => {
+          const { bridgePost } = await import("./diff-bridge-client")
+          try {
+            const bridgeFiles = fileChanges.map((change) => ({
+              filePath: change.filePath,
+              type: change.type,
+              newContent: change.newContent,
+              diff: change.diff,
+              movePath: change.movePath,
+            }))
+            await bridgePost("/apply-patch", { files: bridgeFiles })
+            const summaryLines = fileChanges.map((c) =>
+              c.type === "add"
+                ? `A ${path.relative(Instance.worktree, c.filePath)}`
+                : c.type === "delete"
+                  ? `D ${path.relative(Instance.worktree, c.filePath)}`
+                  : `M ${path.relative(Instance.worktree, c.movePath ?? c.filePath)}`,
+            )
+            const output = `Patch queued for review:\n${summaryLines.join("\n")}`
+            return { title: output, metadata: { diff: totalDiff, files, diagnostics: {} }, output }
+          } catch (error) {
+            console.error("[diff-bridge] fallthrough:", error)
+          }
+        })
+        if (bridgeResult) return bridgeResult
+      }
+
       // Apply the changes
       const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
 
@@ -220,7 +248,7 @@ export const ApplyPatchTool = Tool.define(
             if (change.movePath) {
               // Create parent directories (recursive: true is safe on existing/root dirs)
 
-              yield* afs.writeWithDirs(change.movePath!, change.newContent)
+              yield* afs.writeWithDirs(change.movePath, change.newContent)
               yield* afs.remove(change.filePath)
               updates.push({ file: change.filePath, event: "unlink" })
               updates.push({ file: change.movePath, event: "add" })

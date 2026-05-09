@@ -222,6 +222,11 @@ export default function Layout(props: ParentProps) {
     makeEventListener(window, "blur", stop)
     makeEventListener(window, "blur", blur)
     makeEventListener(document, "visibilitychange", hide)
+    makeEventListener(window, "message", (event: MessageEvent) => {
+      const data = event.data as { type?: string; sessionId?: string } | null
+      if (data?.type !== "opencode-web.navigate" || typeof data.sessionId !== "string") return
+      navigate(`/${params.dir}/session/${data.sessionId}`)
+    })
   })
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)

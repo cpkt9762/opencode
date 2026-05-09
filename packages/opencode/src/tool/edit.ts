@@ -3,21 +3,21 @@
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
-import z from "zod"
-import * as path from "path"
-import { Effect } from "effect"
-import * as Tool from "./tool"
-import { LSP } from "../lsp"
+import * as path from "node:path"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { createTwoFilesPatch, diffLines } from "diff"
-import DESCRIPTION from "./edit.txt"
+import { Effect } from "effect"
+import z from "zod"
+import type { Snapshot } from "@/snapshot"
+import { Bus } from "../bus"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
-import { Bus } from "../bus"
 import { Format } from "../format"
+import { LSP } from "../lsp"
 import { Instance } from "../project/instance"
-import { Snapshot } from "@/snapshot"
+import DESCRIPTION from "./edit.txt"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import * as Tool from "./tool"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -68,7 +68,7 @@ export const EditTool = Tool.define(
           let diff = ""
           let contentOld = ""
           let contentNew = ""
-          yield* Effect.gen(function* () {
+          const bridgeResult = yield* Effect.gen(function* () {
             if (params.oldString === "") {
               const existed = yield* afs.existsSafe(filePath)
               contentNew = params.newString
@@ -82,6 +82,26 @@ export const EditTool = Tool.define(
                   diff,
                 },
               })
+              if (process.env.OPENCODE_DIFF_BRIDGE_URL) {
+                const bridgeResult = yield* Effect.promise(async () => {
+                  const { bridgePost } = await import("./diff-bridge-client")
+                  try {
+                    await bridgePost("/apply-edit", {
+                      filePath,
+                      newContent: params.newString,
+                      edits: [{ originalStartLine: 1, originalEndLine: 0, modifiedText: params.newString }],
+                    })
+                    return {
+                      title: diff,
+                      output: "Edit queued for review",
+                      metadata: { filepath: filePath, diff },
+                    }
+                  } catch (error) {
+                    console.error("[diff-bridge] fallthrough:", error)
+                  }
+                })
+                if (bridgeResult) return bridgeResult
+              }
               yield* afs.writeWithDirs(filePath, params.newString)
               yield* format.file(filePath)
               yield* bus.publish(File.Event.Edited, { file: filePath })
@@ -121,6 +141,22 @@ export const EditTool = Tool.define(
               },
             })
 
+            if (process.env.OPENCODE_DIFF_BRIDGE_URL) {
+              const bridgeResult = yield* Effect.promise(async () => {
+                const { bridgePost } = await import("./diff-bridge-client")
+                try {
+                  await bridgePost("/apply-edit", { filePath, newContent: contentNew, edits: [] })
+                  return {
+                    title: diff,
+                    output: "Edit queued for review",
+                    metadata: { filepath: filePath, diff },
+                  }
+                } catch (error) {
+                  console.error("[diff-bridge] fallthrough:", error)
+                }
+              })
+              if (bridgeResult) return bridgeResult
+            }
             yield* afs.writeWithDirs(filePath, contentNew)
             yield* format.file(filePath)
             yield* bus.publish(File.Event.Edited, { file: filePath })
@@ -138,6 +174,26 @@ export const EditTool = Tool.define(
               ),
             )
           }).pipe(Effect.orDie)
+          if (bridgeResult) {
+            const filediff: Snapshot.FileDiff = {
+              file: filePath,
+              patch: diff,
+              additions: 0,
+              deletions: 0,
+            }
+            for (const change of diffLines(contentOld, contentNew)) {
+              if (change.added) filediff.additions += change.count || 0
+              if (change.removed) filediff.deletions += change.count || 0
+            }
+            return {
+              ...bridgeResult,
+              metadata: {
+                ...bridgeResult.metadata,
+                diagnostics: {},
+                filediff,
+              },
+            }
+          }
 
           const filediff: Snapshot.FileDiff = {
             file: filePath,
@@ -167,6 +223,7 @@ export const EditTool = Tool.define(
 
           return {
             metadata: {
+              filepath: filePath,
               diagnostics,
               diff,
               filediff,
@@ -293,7 +350,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     const actualBlockSize = endLine - startLine + 1
 
     let similarity = 0
-    let linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
+    const linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
 
     if (linesToCheck > 0) {
       for (let j = 1; j < searchBlockSize - 1 && j < actualBlockSize - 1; j++) {
@@ -342,7 +399,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     const actualBlockSize = endLine - startLine + 1
 
     let similarity = 0
-    let linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
+    const linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
 
     if (linesToCheck > 0) {
       for (let j = 1; j < searchBlockSize - 1 && j < actualBlockSize - 1; j++) {

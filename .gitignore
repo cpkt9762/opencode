@@ -29,3 +29,15 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Personal/local-only artifacts (never tracked in this fork)
+.sisyphus/
+3rd-github/
+my-patch/
+plugins/
+/docs/
+
+# Local fork build outputs and external clones
+VSCode-darwin-arm64/
+opencode-ide-fork/
+opencode-web-for-vscode/

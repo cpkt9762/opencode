@@ -481,7 +481,7 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders locale={locale.latest}>
-        <Show when={!defaultServer.loading && !sidecar.loading && !locale.loading}>
+        <Show when={!defaultServer.loading && !sidecar.loading && !locale.loading} keyed>
           {(_) => {
             return (
               <AppInterface

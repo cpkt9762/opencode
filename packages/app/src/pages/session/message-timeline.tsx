@@ -1066,12 +1066,12 @@ export function MessageTimeline(props: {
                                               class="size-3.5 shrink-0"
                                             />
                                             <span class="truncate">{getFilename(c().path)}</span>
-                                            <Show when={c().selection}>
+                                            <Show when={c().selection} keyed>
                                               {(selection) => (
                                                 <span class="shrink-0 text-text-weak">
-                                                  {selection().startLine === selection().endLine
-                                                    ? `:${selection().startLine}`
-                                                    : `:${selection().startLine}-${selection().endLine}`}
+                                                  {selection.startLine === selection.endLine
+                                                    ? `:${selection.startLine}`
+                                                    : `:${selection.startLine}-${selection.endLine}`}
                                                 </span>
                                               )}
                                             </Show>

@@ -1,18 +1,18 @@
-import z from "zod"
-import * as path from "path"
-import { Effect } from "effect"
-import * as Tool from "./tool"
-import { LSP } from "../lsp"
+import * as path from "node:path"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { createTwoFilesPatch } from "diff"
-import DESCRIPTION from "./write.txt"
+import { Effect } from "effect"
+import z from "zod"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Format } from "../format"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { LSP } from "../lsp"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import * as Tool from "./tool"
+import DESCRIPTION from "./write.txt"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -51,6 +51,35 @@ export const WriteTool = Tool.define(
             },
           })
 
+          if (process.env.OPENCODE_DIFF_BRIDGE_URL) {
+            const bridgeResult = yield* Effect.promise(async () => {
+              const { bridgePost } = await import("./diff-bridge-client")
+              try {
+                await bridgePost("/apply-write", {
+                  filePath: filepath,
+                  newContent: params.content,
+                })
+                return {
+                  title: diff,
+                  output: "Write queued for review",
+                  metadata: { filepath, diff },
+                }
+              } catch (error) {
+                console.error("[diff-bridge] fallthrough:", error)
+              }
+            })
+            if (bridgeResult) {
+              return {
+                ...bridgeResult,
+                metadata: {
+                  ...bridgeResult.metadata,
+                  diagnostics: {},
+                  exists,
+                },
+              }
+            }
+          }
+
           yield* fs.writeWithDirs(filepath, params.content)
           yield* format.file(filepath)
           yield* bus.publish(File.Event.Edited, { file: filepath })
@@ -81,6 +110,7 @@ export const WriteTool = Tool.define(
             title: path.relative(Instance.worktree, filepath),
             metadata: {
               diagnostics,
+              diff,
               filepath,
               exists: exists,
             },
