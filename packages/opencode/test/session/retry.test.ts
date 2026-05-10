@@ -230,6 +230,67 @@ describe("session.retry.retryable", () => {
     expect(retryable).toBeDefined()
     expect(retryable).toBe("Response decompression failed")
   })
+
+  test("retries EmptyOther stream truncation failures", () => {
+    const error = new MessageV2.APIError({
+      message: "Provider stream ended without a stop reason",
+      isRetryable: true,
+      metadata: { code: "EmptyOther" },
+    }).toObject() as MessageV2.APIError
+
+    const retryable = SessionRetry.retryable(error)
+    expect(retryable).toBeDefined()
+    expect(retryable).toBe("Provider stream ended without a stop reason")
+  })
+
+  test("policy stops retrying EmptyOther after 3 attempts", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const sessionID = SessionID.make("session-empty-other-test")
+        const error = new MessageV2.APIError({
+          message: "Provider stream ended without a stop reason",
+          isRetryable: true,
+          metadata: { code: "EmptyOther" },
+          responseHeaders: { "retry-after-ms": "0" },
+        }).toObject() as MessageV2.APIError
+
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const step = yield* Schedule.toStepWithMetadata(
+              SessionRetry.policy({
+                parse: (err) => err as MessageV2.APIError,
+                set: (info) =>
+                  Effect.promise(() =>
+                    AppRuntime.runPromise(
+                      SessionStatus.Service.use((svc) =>
+                        svc.set(sessionID, {
+                          type: "retry",
+                          attempt: info.attempt,
+                          message: info.message,
+                          next: info.next,
+                        }),
+                      ),
+                    ),
+                  ),
+              }),
+            )
+            yield* step(error)
+            yield* step(error)
+            const thirdExit = yield* Effect.exit(step(error))
+            expect(thirdExit._tag).toBe("Failure")
+          }),
+        )
+
+        expect(await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.get(sessionID)))).toMatchObject({
+          type: "retry",
+          attempt: 2,
+          message: "Provider stream ended without a stop reason",
+        })
+      },
+    })
+  })
 })
 
 describe("session.message-v2.fromError", () => {
@@ -279,6 +340,21 @@ describe("session.message-v2.fromError", () => {
     const retryable = SessionRetry.retryable(error)
     expect(retryable).toBeDefined()
     expect(retryable).toBe("Connection reset by server")
+  })
+
+  test("converts APIError class instances to wire form for storage", () => {
+    const thrown = new MessageV2.APIError({
+      message: "Provider stream ended without a stop reason",
+      isRetryable: true,
+      metadata: { code: "EmptyOther" },
+    })
+
+    const result = MessageV2.fromError(thrown, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toBe("Provider stream ended without a stop reason")
+    expect((result as MessageV2.APIError).data.metadata?.code).toBe("EmptyOther")
+    expect((result as { name: string }).name).toBe("APIError")
   })
 
   test("marks OpenAI 404 status codes as retryable", () => {

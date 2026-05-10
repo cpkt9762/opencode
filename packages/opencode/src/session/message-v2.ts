@@ -952,6 +952,12 @@ export function fromError(
       ).toObject()
     case OutputLengthError.isInstance(e):
       return e
+    // Convert APIError class instances thrown via `Effect.fail(new APIError(...))`
+    // to their wire form so the TUI receives the structured message and metadata
+    // instead of a JSON-stringified UnknownError wrapper.
+    // Ported from upstream PR #26167 (anomalyco/opencode) which Closes #26170.
+    case APIError.isInstance(e):
+      return e instanceof Error ? e.toObject() : e
     case LoadAPIKeyError.isInstance(e):
       return new AuthError(
         {

@@ -1446,14 +1446,21 @@ const layer: Layer.Layer<
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
 
-          // Strip openai itemId metadata following what codex does
+          // Strip openai itemId metadata following what codex does.
+          // EXCEPTION (local fix on top of upstream PR #26167 port): preserve
+          // `id` for `item_reference` and `reasoning` items so retry-after-
+          // EmptyOther can replay the previously-paid reasoning via
+          // OpenAI Responses API `item_reference` instead of re-thinking.
+          // Without this, the EmptyOther retry forces the model to redo the
+          // entire reasoning step (e.g. 47s of GPT-5.x reasoning), defeating
+          // the purpose of preserving `metadata.openai.itemId` on reasoning parts.
           if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
             const body = JSON.parse(opts.body as string)
             const isAzure = model.providerID.includes("azure")
             const keepIds = isAzure && body.store === true
             if (!keepIds && Array.isArray(body.input)) {
               for (const item of body.input) {
-                if ("id" in item) {
+                if ("id" in item && item.type !== "item_reference" && item.type !== "reasoning") {
                   delete item.id
                 }
               }

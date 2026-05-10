@@ -360,6 +360,22 @@ export const layer: Layer.Layer<
               usage: value.usage,
               metadata: value.providerMetadata,
             })
+            // Detect stream truncation: AI SDK reports finishReason="other" when
+            // the upstream provider stream ends without a proper stop_reason
+            // (initialised default in @ai-sdk/anthropic + ai SDK flush fallback,
+            // and OpenAI Responses adapter's `let finishReason = { unified: "other" }`).
+            // No usage and no output means the connection was cut mid-generation,
+            // which is a transient failure that should be retried.
+            // Ported from upstream PR #26167 (anomalyco/opencode) which Closes #26170.
+            if (value.finishReason === "other" && usage.tokens.output === 0) {
+              return yield* Effect.fail(
+                new MessageV2.APIError({
+                  message: "Provider stream ended without a stop reason",
+                  isRetryable: true,
+                  metadata: { code: "EmptyOther" },
+                }),
+              )
+            }
             ctx.assistantMessage.finish = value.finishReason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens

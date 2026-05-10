@@ -112,6 +112,18 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const message = retryable(error)
       if (!message) return Cause.done(meta.attempt)
+      // Cap empty-other stream-truncation retries to avoid infinite loops if a
+      // provider keeps closing streams without a stop_reason. Other retryable
+      // classifications (rate limits, 5xx, ZlibError, etc.) keep their existing
+      // unbounded behaviour.
+      // Ported from upstream PR #26167 (anomalyco/opencode) which Closes #26170.
+      if (
+        MessageV2.APIError.isInstance(error) &&
+        error.data.metadata?.code === "EmptyOther" &&
+        meta.attempt >= 3
+      ) {
+        return Cause.done(meta.attempt)
+      }
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis
