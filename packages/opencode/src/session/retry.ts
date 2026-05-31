@@ -183,6 +183,15 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
+      // Cap empty-other stream-truncation retries to avoid infinite loops if
+      // a provider keeps closing streams without a stop_reason.
+      if (
+        SessionLegacy.APIError.isInstance(error) &&
+        error.data.metadata?.code === "EmptyOther" &&
+        meta.attempt >= 3
+      ) {
+        return Cause.done(meta.attempt)
+      }
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis

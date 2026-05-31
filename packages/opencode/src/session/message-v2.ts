@@ -625,6 +625,10 @@ export function fromError(
       ).toObject()
     case OutputLengthError.isInstance(e):
       return e
+    // Convert APIError class instances to wire form so the TUI receives
+    // structured metadata instead of a JSON-stringified UnknownError wrapper.
+    case APIError.isInstance(e):
+      return e instanceof Error ? e.toObject() : e
     case LoadAPIKeyError.isInstance(e):
       return new AuthError(
         {

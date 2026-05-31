@@ -460,16 +460,30 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   }
 
   // Strip Responses item IDs before serialization, following Codex and keeping signed request bodies immutable.
+  // EXCEPTION: preserve itemId on `reasoning` parts so EmptyOther retry can replay previously-paid reasoning
+  // via the OpenAI Responses API (item_reference) instead of forcing a full re-think.
   if (
     options.store !== true &&
     key &&
     ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle"].includes(model.api.npm)
   ) {
-    msgs = mapProviderOptions(msgs, (options) => {
-      if (!options?.[key] || !("itemId" in options[key])) return options
-      const metadata = { ...options[key] }
+    const strip = (opts: Record<string, any> | undefined) => {
+      if (!opts?.[key] || !("itemId" in opts[key])) return opts
+      const metadata = { ...opts[key] }
       delete metadata.itemId
-      return { ...options, [key]: metadata }
+      return { ...opts, [key]: metadata }
+    }
+    msgs = msgs.map((msg) => {
+      if (!Array.isArray(msg.content)) return { ...msg, providerOptions: strip(msg.providerOptions) }
+      return {
+        ...msg,
+        providerOptions: strip(msg.providerOptions),
+        content: msg.content.map((part) => {
+          if (part.type === "tool-approval-request" || part.type === "tool-approval-response") return part
+          if (part.type === "reasoning") return part
+          return { ...part, providerOptions: strip(part.providerOptions) }
+        }),
+      } as typeof msg
     })
   }
 
