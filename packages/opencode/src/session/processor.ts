@@ -698,10 +698,11 @@ export const layer = Layer.effect(
               usage: value.usage ?? new Usage({}),
               metadata: value.providerMetadata,
             })
-            // Detect stream truncation: AI SDK reports reason="other" when the
-            // upstream provider stream ends without a stop_reason. Zero output
-            // tokens means connection was cut mid-generation — retry it.
-            if (value.reason === "other" && usage.tokens.output === 0) {
+            // Detect stream truncation: AI SDK reports reason="unknown" (was
+            // "other" pre-upstream-rename) when the provider stream ends without
+            // a stop_reason. Zero output tokens means connection was cut
+            // mid-generation — retry it.
+            if (value.reason === "unknown" && usage.tokens.output === 0) {
               return yield* Effect.fail(
                 new SessionLegacy.APIError({
                   message: "Provider stream ended without a stop reason",
