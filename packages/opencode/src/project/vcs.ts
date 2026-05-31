@@ -376,32 +376,14 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
             }),
         )
       }),
-      diff: Effect.fn("Vcs.diff")(function* (mode: Mode, options?: DiffOptions) {
-        const value = yield* InstanceState.get(state)
-        const ctx = yield* InstanceState.context
-        if (ctx.project.vcs !== "git") return []
-        if (mode === "git") {
-          return yield* track(git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined, options)
-        }
-
-        if (!value.root) return []
-        if (value.current && value.current === value.root.name) return []
-        const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
-        if (!ref) return []
-        return yield* diffAgainstRef(git, ctx.directory, ref, options)
+      // perf: VCS diff disabled — eliminate desktop full-context git diff cost
+      diff: Effect.fn("Vcs.diff")(function* (_mode: Mode, _options?: DiffOptions) {
+        yield* Effect.void
+        return [] as FileDiff[]
       }),
       diffRaw: Effect.fn("Vcs.diffRaw")(function* () {
-        const ctx = yield* InstanceState.context
-        if (ctx.project.vcs !== "git") return ""
-        const [hasHead, status] = yield* Effect.all([git.hasHead(ctx.directory), git.status(ctx.directory)], {
-          concurrency: 2,
-        })
-        const tracked = hasHead ? (yield* git.patchAll(ctx.directory, "HEAD")).text : ""
-        const untracked = yield* Effect.forEach(
-          status.filter((item) => item.code === "??"),
-          (item) => git.patchUntracked(ctx.directory, item.file).pipe(Effect.map((patch) => patch.text)),
-        )
-        return [tracked, ...untracked].filter(Boolean).join("\n")
+        yield* Effect.void
+        return ""
       }),
       apply: Effect.fn("Vcs.apply")(function* (input: ApplyInput) {
         const ctx = yield* InstanceState.context
