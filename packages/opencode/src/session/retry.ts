@@ -186,7 +186,7 @@ export function policy(opts: {
       // Cap empty-other stream-truncation retries to avoid infinite loops if
       // a provider keeps closing streams without a stop_reason.
       if (
-        SessionLegacy.APIError.isInstance(error) &&
+        SessionV1.APIError.isInstance(error) &&
         error.data.metadata?.code === "EmptyOther" &&
         meta.attempt >= 3
       ) {

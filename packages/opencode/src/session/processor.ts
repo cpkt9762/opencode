@@ -704,7 +704,7 @@ export const layer = Layer.effect(
             // mid-generation — retry it.
             if (value.reason === "unknown" && usage.tokens.output === 0) {
               return yield* Effect.fail(
-                new SessionLegacy.APIError({
+                new SessionV1.APIError({
                   message: "Provider stream ended without a stop reason",
                   isRetryable: true,
                   metadata: { code: "EmptyOther" },
