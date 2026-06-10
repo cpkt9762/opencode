@@ -1,4 +1,3 @@
-import { scrollLog } from "@opencode-ai/ui/debug/dat-logger"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createEffect, on, onCleanup } from "solid-js"
@@ -71,16 +70,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = store.scrollRef
     if (!el) return
     markAuto(el)
-    scrollLog("autoScroll.scrollToBottomNow", {
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-      distBottom: distanceFromBottom(el),
-      userScrolled: store.userScrolled,
-      isAuto: true,
-      trigger,
-      extra: `behavior=${behavior}`,
-    })
     if (behavior === "smooth") {
       el.scrollTo({ top: el.scrollHeight, behavior })
       return
@@ -146,17 +135,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = store.scrollRef
     if (!el) return
     const dist = distanceFromBottom(el)
-    const a = auto
-    scrollLog("autoScroll.handleScroll", {
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-      distBottom: dist,
-      userScrolled: store.userScrolled,
-      isAuto: !!a && Date.now() - a.time <= 1500 && Math.abs(el.scrollTop - a.top) < 2,
-      trigger: "handleScroll",
-      extra: `threshold=${threshold()}`,
-    })
 
     if (!canScroll(el)) {
       if (store.userScrolled) setStore("userScrolled", false)
@@ -196,20 +174,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const updateOverflowAnchor = (el: HTMLElement) => {
     const mode = options.overflowAnchor ?? "dynamic"
     const value = mode === "none" ? "none" : mode === "auto" ? "auto" : store.userScrolled ? "auto" : "none"
-    const prev = el.style.overflowAnchor
-    const a = auto
     el.style.overflowAnchor = value
-    if (prev === value) return
-    scrollLog("autoScroll.overflowAnchor", {
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-      distBottom: distanceFromBottom(el),
-      userScrolled: store.userScrolled,
-      isAuto: !!a && Date.now() - a.time <= 1500 && Math.abs(el.scrollTop - a.top) < 2,
-      trigger: "updateOverflowAnchor",
-      extra: `mode=${mode} value=${value}`,
-    })
   }
 
   createResizeObserver(
@@ -223,22 +188,13 @@ export function createAutoScroll(options: AutoScrollOptions) {
       const prev = height
       height = el.scrollHeight
       if (!canScroll(el)) {
-        if (store.userScrolled) setStore("userScrolled", false)
+        // Don't clear userScrolled on transient content shrinks (DOM rebuilds
+        // during turn backfill can briefly make scrollHeight < clientHeight)
+        if (store.userScrolled && !(prev !== undefined && height < prev)) setStore("userScrolled", false)
         return
       }
       if (!active()) return
       if (store.userScrolled) return
-      const a = auto
-      scrollLog("autoScroll.resize", {
-        scrollTop: el.scrollTop,
-        scrollHeight: el.scrollHeight,
-        clientHeight: el.clientHeight,
-        distBottom: distanceFromBottom(el),
-        userScrolled: store.userScrolled,
-        isAuto: !!a && Date.now() - a.time <= 1500 && Math.abs(el.scrollTop - a.top) < 2,
-        trigger: "resizeObserver",
-        extra: `beforeHeight=${prev ?? ""} nextHeight=${el.scrollHeight}`,
-      })
       // ResizeObserver fires after layout, before paint.
       // Keep the bottom locked in the same frame to avoid visible
       // "jump up then catch up" artifacts while streaming content.
