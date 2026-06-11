@@ -1071,6 +1071,102 @@ it.instance(
 )
 
 it.instance(
+  "ask - interrupt publishes replied event so stale UI clears",
+  () =>
+    Effect.gen(function* () {
+      const bridge = yield* EventV2Bridge.Service
+      const seen = yield* Deferred.make<{ sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }>()
+      const unsub = yield* bridge.listen((event) => {
+        if (event.type === Permission.Event.Replied.type)
+          Deferred.doneUnsafe(
+            seen,
+            Effect.succeed(event.data as { sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }),
+          )
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => unsub)
+
+      const fiber = yield* ask({
+        id: PermissionID.make("per_interrupt"),
+        sessionID: SessionID.make("session_interrupt"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+      yield* Fiber.interrupt(fiber)
+
+      expect(
+        yield* Deferred.await(seen).pipe(
+          Effect.timeoutOrElse({
+            duration: "1 second",
+            orElse: () => Effect.fail(new Error("timed out waiting for replied event on interrupt")),
+          }),
+        ),
+      ).toEqual({
+        sessionID: SessionID.make("session_interrupt"),
+        requestID: PermissionID.make("per_interrupt"),
+        reply: "reject",
+      })
+      expect(yield* list()).toHaveLength(0)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "instance dispose publishes replied event for every pending request",
+  () =>
+    Effect.gen(function* () {
+      const bridge = yield* EventV2Bridge.Service
+      const test = yield* TestInstance
+      const store = yield* InstanceStore.Service
+
+      const seen: Array<{ sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }> = []
+      const unsub = yield* bridge.listen((event) => {
+        if (event.type === Permission.Event.Replied.type)
+          seen.push(event.data as { sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply })
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => unsub)
+
+      const a = yield* ask({
+        id: PermissionID.make("per_dispose_a"),
+        sessionID: SessionID.make("session_dispose_a"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const b = yield* ask({
+        id: PermissionID.make("per_dispose_b"),
+        sessionID: SessionID.make("session_dispose_b"),
+        permission: "bash",
+        patterns: ["pwd"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(2)
+      const ctx = yield* store.load({ directory: test.directory })
+      yield* store.dispose(ctx)
+
+      yield* Fiber.await(a)
+      yield* Fiber.await(b)
+
+      const ids = seen.map((e) => e.requestID).sort()
+      expect(ids).toEqual([PermissionID.make("per_dispose_a"), PermissionID.make("per_dispose_b")])
+      for (const event of seen) expect(event.reply).toBe("reject")
+    }),
+  { git: true },
+)
+
+it.instance(
   "reply - fails for unknown requestID",
   () =>
     Effect.gen(function* () {

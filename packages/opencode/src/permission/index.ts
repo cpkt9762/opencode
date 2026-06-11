@@ -64,10 +64,19 @@ export const layer = Layer.effect(
 
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
-            for (const item of state.pending.values()) {
+            // Emit replied so remote clients drop stale prompts (upstream #29422).
+            // Snapshot + clear first: Deferred.fail wakes ask's ensuring which would
+            // otherwise see the entry still present and re-publish.
+            const entries = Array.from(state.pending.values())
+            state.pending.clear()
+            for (const item of entries) {
+              yield* events.publish(Event.Replied, {
+                sessionID: item.info.sessionID,
+                requestID: item.info.id,
+                reply: "reject",
+              })
               yield* Deferred.fail(item.deferred, new PermissionV1.RejectedError())
             }
-            state.pending.clear()
           }),
         )
 
@@ -111,8 +120,16 @@ export const layer = Layer.effect(
       yield* events.publish(Event.Asked, info)
       return yield* Effect.ensuring(
         Deferred.await(deferred),
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          // Entry still present means interrupt (reply() already deletes on success);
+          // emit replied so stale UI cards can be dropped (upstream #29422).
+          if (!pending.has(id)) return
           pending.delete(id)
+          yield* events.publish(Event.Replied, {
+            sessionID: info.sessionID,
+            requestID: id,
+            reply: "reject",
+          })
         }),
       )
     })
