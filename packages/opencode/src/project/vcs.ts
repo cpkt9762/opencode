@@ -351,30 +351,15 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
       defaultBranch: Effect.fn("Vcs.defaultBranch")(function* () {
         return yield* InstanceState.use(state, (x) => x.root?.name)
       }),
+      // perf: VCS status disabled — same rationale as Vcs.diff/diffRaw stubs below.
+      // Skip git status/stats walks so the filesystem watcher does not spawn git
+      // subprocesses per file event. Avoids reproducible fatals on repos with
+      // orphan/broken submodules (no submodule mapping, bad HEAD, alternate path
+      // failures) and eliminates desktop-side hot-loop git cost. Aligns with the
+      // earlier fork commit 5ef11155b which stubbed diff/diffRaw/summarize.
       status: Effect.fn("Vcs.status")(function* () {
-        const ctx = yield* InstanceState.context
-        if (ctx.project.vcs !== "git") return []
-        const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
-        const [list, stats] = yield* Effect.all(
-          [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
-          { concurrency: 2 },
-        )
-        const map = nums(stats)
-        return yield* Effect.forEach(
-          list.toSorted((a, b) => a.file.localeCompare(b.file)),
-          (item) =>
-            Effect.gen(function* () {
-              const stat =
-                map.get(item.file) ??
-                (item.status === "added" ? yield* git.statUntracked(ctx.worktree, item.file) : undefined)
-              return {
-                file: item.file,
-                additions: stat?.additions ?? 0,
-                deletions: stat?.deletions ?? 0,
-                status: item.status,
-              } satisfies FileStatus
-            }),
-        )
+        yield* Effect.void
+        return [] as FileStatus[]
       }),
       // perf: VCS diff disabled — eliminate desktop full-context git diff cost
       diff: Effect.fn("Vcs.diff")(function* (_mode: Mode, _options?: DiffOptions) {

@@ -15,6 +15,11 @@ const cfg = [
   "core.symlinks=true",
   "-c",
   "core.quotepath=false",
+  // perf/robustness: never recurse into submodules from status/diff/checkout walks —
+  // tolerates orphan submodule dirs, broken alternates, and missing .gitmodules
+  // mappings (e.g. worktree-leaked cargo-make dirs with stale alternate paths).
+  "-c",
+  "submodule.recurse=false",
 ] as const
 
 const out = (result: { text(): string }) => result.text().trim()
