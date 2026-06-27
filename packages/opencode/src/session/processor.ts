@@ -33,6 +33,37 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
+const SALVAGE_RAW_MAX = 4096
+
+/**
+ * On forced cleanup (session abort) we used to drop every in-flight tool call's
+ * streamed JSON arguments and write `state.input = {}` along with
+ * `error = "Tool execution aborted"`. The streamed `raw` accumulated in
+ * `ctx.toolcalls[id].raw` was lost, which left parent sessions / forensic
+ * tooling with no way to tell what the model was about to invoke.
+ *
+ * This helper tries to salvage the streamed args: if `raw` parses to a JSON
+ * object it becomes the new `state.input`; otherwise the (truncated) raw
+ * snapshot is surfaced via `metadata.interruptedRawSnapshot` so the data is
+ * not silently dropped.
+ */
+function salvageStreamingToolInput(
+  raw: string | undefined,
+  fallback: Record<string, any>,
+): { input: Record<string, any>; rawSnapshot?: string } {
+  if (!raw) return { input: fallback }
+  try {
+    const parsed = JSON.parse(raw)
+    if (isRecord(parsed)) return { input: parsed }
+  } catch {
+    // streaming was interrupted mid-token; fall through to raw snapshot
+  }
+  return {
+    input: fallback,
+    rawSnapshot: raw.length > SALVAGE_RAW_MAX ? raw.slice(0, SALVAGE_RAW_MAX) + "…[truncated]" : raw,
+  }
+}
+
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
@@ -889,9 +920,15 @@ export const layer = Layer.effect(
         }
         ctx.reasoningMap = {}
 
+        // Grace period for in-flight streaming tool calls to settle naturally.
+        // The previous 250ms was tuned for completed-tool execution races, but
+        // it's too short for the common case where the LLM is still streaming
+        // tool-input deltas when the parent aborts (especially for reasoning
+        // models like gpt-5.5 that emit long tool arguments). 1500ms covers
+        // the vast majority of in-flight streams while still bounding cleanup.
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
-          (call) => Deferred.await(call.done).pipe(Effect.timeout("250 millis"), Effect.ignore),
+          (call) => Deferred.await(call.done).pipe(Effect.timeout("1500 millis"), Effect.ignore),
           { concurrency: "unbounded" },
         )
 
@@ -911,13 +948,24 @@ export const layer = Layer.effect(
           }
           const end = Date.now()
           const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
+          // Salvage the streamed tool-input bytes before they are dropped.
+          // ctx.toolcalls[id].raw accumulates every tool-input-delta the
+          // model emitted; without this, an abort during streaming wrote
+          // `state.input = {}` and lost the entire payload.
+          const fallbackInput = "input" in part.state && isRecord(part.state.input) ? part.state.input : {}
+          const salvage = salvageStreamingToolInput(match.call.raw, fallbackInput)
+          const interruptedMetadata: Record<string, any> = { ...metadata, interrupted: true }
+          if (salvage.rawSnapshot !== undefined) {
+            interruptedMetadata.interruptedRawSnapshot = salvage.rawSnapshot
+          }
           yield* session.updatePart({
             ...part,
             state: {
               ...part.state,
+              input: salvage.input,
               status: "error",
               error: "Tool execution aborted",
-              metadata: { ...metadata, interrupted: true },
+              metadata: interruptedMetadata,
               time: { start: "time" in part.state ? part.state.time.start : end, end },
             },
           })
