@@ -773,11 +773,22 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
       init: Effect.fn("Snapshot.init")(function* () {
         yield* InstanceState.get(state)
       }),
+      // perf: Snapshot.cleanup disabled — the hourly `git gc --prune=7.days` on the shadow
+      // snapshot repo is itself a multi-minute walk on large worktrees and is meaningless
+      // once track() below is stubbed (no refs to gc).
       cleanup: Effect.fn("Snapshot.cleanup")(function* () {
-        return yield* InstanceState.useEffect(state, (s) => s.cleanup())
+        yield* Effect.void
       }),
+      // perf: Snapshot.track disabled — eliminate per-message-turn `git add --all` + write-tree
+      // on the shadow snapshot repo. Called multiple times per turn from processor.ts (initial,
+      // step-start, step-finish). On large worktrees this is the dominant on-turn cost. Returning
+      // undefined is schema-safe (public type already allows `string | undefined`, and
+      // processor.ts:743 guards `if (ctx.snapshot)` before any downstream patch() call).
+      // Trade-off: revert/undo has no new hash to act on. Aligns with 5ef11155b (SessionSummary/
+      // Vcs stubs) and patch 0007 (Vcs.status stub). Addresses upstream #32981, #29873.
       track: Effect.fn("Snapshot.track")(function* () {
-        return yield* InstanceState.useEffect(state, (s) => s.track())
+        yield* Effect.void
+        return undefined
       }),
       patch: Effect.fn("Snapshot.patch")(function* (hash: string) {
         return yield* InstanceState.useEffect(state, (s) => s.patch(hash))
@@ -788,11 +799,20 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
       revert: Effect.fn("Snapshot.revert")(function* (patches: Patch[]) {
         return yield* InstanceState.useEffect(state, (s) => s.revert(patches))
       }),
-      diff: Effect.fn("Snapshot.diff")(function* (hash: string) {
-        return yield* InstanceState.useEffect(state, (s) => s.diff(hash))
+      // perf: Snapshot.diff disabled — eliminate full-context patch generation
+      // (formatPatch(structuredPatch(..., { context: Number.MAX_SAFE_INTEGER }))) for arbitrary
+      // hashes. Called from server routes; large files materialize the entire file content into
+      // a single patch string. Empty string is schema-safe (return type is Effect<string>).
+      diff: Effect.fn("Snapshot.diff")(function* (_hash: string) {
+        yield* Effect.void
+        return ""
       }),
-      diffFull: Effect.fn("Snapshot.diffFull")(function* (from: string, to: string) {
-        return yield* InstanceState.useEffect(state, (s) => s.diffFull(from, to))
+      // perf: Snapshot.diffFull disabled — same rationale as diff above, for from→to pairs.
+      // Used by revert.ts and SessionSummary.computeDiff (revert path only). Upstream PR #20752
+      // batches blob reads but still materializes full-context patches per file.
+      diffFull: Effect.fn("Snapshot.diffFull")(function* (_from: string, _to: string) {
+        yield* Effect.void
+        return [] as FileDiff[]
       }),
     })
   }),
