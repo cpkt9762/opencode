@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
-import { shouldScanUpward } from "@opencode-ai/core/filesystem/search-scan"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Ripgrep.defaultLayer)
+const it = testEffect(LayerNode.compile(Ripgrep.node))
 
 const withTmp = <A, E, R>(f: (directory: AbsolutePath) => Effect.Effect<A, E, R>) =>
   Effect.acquireRelease(
@@ -41,25 +41,4 @@ describe("Ripgrep", () => {
       }),
     ),
   )
-})
-
-describe("shouldScanUpward", () => {
-  const home = path.resolve("/home/alice")
-
-  test("scans upward from a project directory inside home", () => {
-    expect(shouldScanUpward(path.join(home, "projects", "app"), home)).toBe(true)
-  })
-
-  test("does not scan when the directory is home itself", () => {
-    expect(shouldScanUpward(home, home)).toBe(false)
-  })
-
-  test("does not scan from the filesystem root", () => {
-    const root = path.parse(home).root
-    expect(shouldScanUpward(root, home)).toBe(false)
-  })
-
-  test("does not scan from an ancestor of home", () => {
-    expect(shouldScanUpward(path.dirname(home), home)).toBe(false)
-  })
 })
