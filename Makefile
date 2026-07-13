@@ -127,12 +127,16 @@ cli-debug: CLI_DEBUG := 1
 cli-debug: cli
 	@echo "Debug binary + .map files built. See 'make cli-debug' comment for profiling workflow."
 
-# Build production Tauri binary (rebuilds CLI sidecar first)
-# tauri build may fail at updater signing when TAURI_SIGNING_PRIVATE_KEY is unset;
-# the .app bundle is still produced, so treat that as success.
-build: cli
-	PATH="$(dir $(BUN)):$$PATH" $(BUN) run --cwd $(DESKTOP_DIR) tauri build -c $(PROD_CONF) || \
-		([ -d "$(BUNDLE_DIR)/$(APP_NAME)" ] && echo "Build ok (updater signing skipped — set TAURI_SIGNING_PRIVATE_KEY for full release)")
+# Build + install production Electron .app to /Applications.
+# Was Tauri until upstream commit b4147c8d08 (2026-05-05, #25822
+# "refactor(desktop): consolidate desktop-electron into desktop package")
+# deleted all Tauri configs (Cargo.toml, tauri.*.conf.json, src-tauri/src/,
+# build.rs, entitlements.plist, icons/, capabilities/) when consolidating
+# desktop-electron into the desktop package. The Tauri path has been broken
+# since — the stale .app in BUNDLE_DIR was masking the failure via the
+# fallback test. This alias delegates to the maintained Electron path so
+# `make build` continues to "just work".
+build: electron-install
 
 # Sign + install Tauri build to /Applications (backs up existing)
 install:
